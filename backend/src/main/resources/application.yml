@@ -1,0 +1,27 @@
+server:
+  port: 8080
+
+spring:
+  application:
+    name: github-device-flow-backend
+
+github:
+  oauth:
+    client-id: ${GITHUB_CLIENT_ID}
+    client-secret: ${GITHUB_CLIENT_SECRET}
+    device-code-url: https://github.com/login/device/code
+    token-url: https://github.com/login/oauth/access_token
+    user-api-url: https://api.github.com/user
+
+# CORS configuration
+cors:
+  allowed-origins: http://localhost:3000
+  allowed-methods: GET,POST,PUT,DELETE,OPTIONS
+  allowed-headers: "*"
+  allow-credentials: true
+
+logging:
+  level:
+    root: INFO
+    com.github.deviceflow: DEBUG
+
