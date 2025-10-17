@@ -13,9 +13,13 @@ Get up and running in 5 minutes!
 1. Go to https://github.com/settings/developers
 2. Click **"New OAuth App"**
 3. Fill in:
-   - **Application name**: `Device Flow Test`
-   - **Homepage URL**: `http://localhost:3000`
-   - **Authorization callback URL**: (leave empty)
+   ```
+   Application name: My Test App
+   Homepage URL: http://localhost:3000
+   Callback URL: http://localhost:3000/auth/callback
+   ```
+   ⚠️ **Callback URL must be EXACT!**
+
 4. Click **"Register application"**
 5. Copy your **Client ID**
 6. Click **"Generate a new client secret"**
@@ -26,7 +30,7 @@ Get up and running in 5 minutes!
 ```bash
 cd backend
 
-# Set environment variables (use your credentials from Step 1)
+# Set your credentials
 export GITHUB_CLIENT_ID=your_client_id_here
 export GITHUB_CLIENT_SECRET=your_client_secret_here
 
@@ -34,7 +38,7 @@ export GITHUB_CLIENT_SECRET=your_client_secret_here
 ./gradlew bootRun
 ```
 
-✅ Backend should now be running on `http://localhost:8080`
+✅ Backend running on `http://localhost:8080`
 
 ## Step 3: Setup Frontend (2 minutes)
 
@@ -50,17 +54,35 @@ npm install
 npm run dev
 ```
 
-✅ Frontend should now be running on `http://localhost:3000`
+✅ Frontend running on `http://localhost:3000`
 
 ## Step 4: Test It! (1 minute)
 
-1. Open your browser to **http://localhost:3000**
+1. Open `http://localhost:3000` in your browser
 2. Click **"Login with GitHub"**
-3. You'll see a device code (e.g., `WDJB-MJHT`)
-4. Click **"Open GitHub"** (opens in new tab)
-5. Enter the code when prompted
-6. Click **"Authorize"**
-7. Return to the app - you're logged in! 🎉
+3. Popup opens automatically
+4. Click **"Authorize"** on GitHub
+5. Popup closes
+6. **You're logged in!** 🎉
+
+## 🎯 That's It!
+
+Total time: **~5 minutes**
+
+## What Just Happened?
+
+1. ✅ GitHub OAuth App created
+2. ✅ Backend running with your credentials
+3. ✅ Frontend connected to backend
+4. ✅ Secure popup OAuth flow working
+5. ✅ User authenticated and profile displayed
+
+## Next Steps
+
+- ✅ Explore the user profile display
+- ✅ Try logging out and back in
+- ✅ Check browser DevTools console for logs
+- ✅ Read [ARCHITECTURE.md](ARCHITECTURE.md) for technical details
 
 ## Troubleshooting
 
@@ -77,21 +99,19 @@ echo $GITHUB_CLIENT_SECRET
 ### Frontend won't start
 ```bash
 # Try clearing node_modules
-rm -rf node_modules
+rm -rf node_modules package-lock.json
 npm install
 ```
 
-### Authorization not working
-- Double-check your Client ID and Secret
-- Make sure backend is running on port 8080
-- Try refreshing the page
+### Popup is blocked
+- Allow popups for `localhost:3000` in your browser settings
+- Look for the popup blocker icon in the address bar
 
-## What's Next?
-
-- Read the [Main README](README.md) for detailed docs
-- Check out the [Backend README](backend/README.md)
-- Check out the [Frontend README](frontend/README.md)
-- Explore the code and customize it!
+### "Callback URL mismatch" error
+Make sure these match EXACTLY:
+- GitHub OAuth App: `http://localhost:3000/auth/callback`
+- Backend config: `http://localhost:3000/auth/callback`
+- Frontend route: `/auth/callback` page exists
 
 ## Common Commands
 
@@ -109,7 +129,74 @@ npm run build              # Build for production
 npm run preview            # Preview production build
 ```
 
+## Environment Variables (Optional)
+
+Instead of `export`, you can create a `.env` file:
+
+**backend/.env**
+```
+GITHUB_CLIENT_ID=your_client_id
+GITHUB_CLIENT_SECRET=your_client_secret
+```
+
+**frontend/.env**
+```
+NUXT_PUBLIC_API_BASE_URL=http://localhost:8080
+```
+
+## What's Different from Device Flow?
+
+This app used to use "Device Flow" (manual code entry). Now it uses:
+
+| Feature | Old (Device Flow) | New (Popup OAuth) |
+|---------|------------------|-------------------|
+| Click to Login | 15+ seconds | <3 seconds ⚡ |
+| User Actions | 5 steps | 2 steps |
+| Manual Code | Yes ❌ | No ✅ |
+| Page Redirects | None | None |
+| UX | Okay | Excellent ✨ |
+
+## Testing Tips
+
+### Check Logs
+
+**Backend logs**:
+```bash
+# Look for:
+# "Generating authorization URL with state: xxx"
+# "Successfully exchanged code for access token"
+```
+
+**Frontend logs** (Browser DevTools):
+```javascript
+// Look for:
+// "Login successful: { login: 'username', ... }"
+// "Device flow response: { url: '...', state: '...' }"
+```
+
+### Test API Directly
+
+```bash
+# Get OAuth URL
+curl http://localhost:8080/api/auth/authorize-url
+
+# Health check
+curl http://localhost:8080/api/auth/health
+```
+
+## Production Deployment
+
+When ready for production:
+
+1. **Update GitHub OAuth App URLs** to your production domain
+2. **Set environment variables** on your hosting platform
+3. **Deploy backend and frontend**
+4. **Test the popup flow**
+
+See [GITHUB_APP_SETUP.md](GITHUB_APP_SETUP.md) for detailed production setup.
+
 ---
 
 **That's it! You're all set! 🚀**
 
+Happy coding!

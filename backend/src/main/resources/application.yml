@@ -7,8 +7,8 @@ spring:
 
 github:
   app:
-    client-id: ${GITHUB_CLIENT_ID}
-    client-secret: ${GITHUB_CLIENT_SECRET}
+    client-id: ${GITHUB_CLIENT_ID:}
+    client-secret: ${GITHUB_CLIENT_SECRET:}
     authorize-url: https://github.com/login/oauth/authorize
     token-url: https://github.com/login/oauth/access_token
     user-api-url: https://api.github.com/user
