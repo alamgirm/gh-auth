@@ -3,28 +3,27 @@ export const useAuth = () => {
   const apiBaseUrl = config.public.apiBaseUrl
   
   const user = useState<any>('user', () => null)
-  const accessToken = useState<string | null>('accessToken', () => null)
-  const isAuthenticated = computed(() => !!user.value && !!accessToken.value)
+  const userId = useState<string | null>('userId', () => null)
+  const isAuthenticated = computed(() => !!user.value && !!userId.value)
   
-  // Load auth state from localStorage on mount
+  // Load auth state from localStorage (only userId)
   const loadAuthState = () => {
     if (process.client) {
-      const storedToken = localStorage.getItem('github_access_token')
-      const storedUser = localStorage.getItem('github_user')
+      const storedUserId = localStorage.getItem('github_user_id')
       
-      if (storedToken && storedUser) {
-        accessToken.value = storedToken
-        user.value = JSON.parse(storedUser)
+      if (storedUserId) {
+        userId.value = storedUserId
+        // Fetch user profile from backend
+        fetchUserProfile()
       }
     }
   }
   
-  // Save auth state to localStorage
-  const saveAuthState = (token: string, userData: any) => {
+  // Save userId to localStorage
+  const saveAuthState = (userIdValue: string, userData: any) => {
     if (process.client) {
-      localStorage.setItem('github_access_token', token)
-      localStorage.setItem('github_user', JSON.stringify(userData))
-      accessToken.value = token
+      localStorage.setItem('github_user_id', userIdValue)
+      userId.value = userIdValue
       user.value = userData
     }
   }
@@ -32,9 +31,8 @@ export const useAuth = () => {
   // Clear auth state
   const clearAuthState = () => {
     if (process.client) {
-      localStorage.removeItem('github_access_token')
-      localStorage.removeItem('github_user')
-      accessToken.value = null
+      localStorage.removeItem('github_user_id')
+      userId.value = null
       user.value = null
     }
   }
@@ -44,6 +42,7 @@ export const useAuth = () => {
     try {
       const response: any = await $fetch(`${apiBaseUrl}/api/auth/authorize-url`, {
         method: 'GET',
+        credentials: 'include', // Important: include cookies for session
       })
       return response
     } catch (error) {
@@ -52,11 +51,13 @@ export const useAuth = () => {
     }
   }
   
-  // Exchange authorization code for token
-  const exchangeCodeForToken = async (code: string, state: string) => {
+  // Exchange authorization code for userId
+  // Backend stores the token and returns userId
+  const exchangeCodeForUserId = async (code: string, state: string) => {
     try {
       const response: any = await $fetch(`${apiBaseUrl}/api/auth/exchange-code`, {
         method: 'POST',
+        credentials: 'include', // Important: include cookies for session
         body: {
           code,
           state
@@ -64,8 +65,57 @@ export const useAuth = () => {
       })
       return response
     } catch (error) {
-      console.error('Error exchanging code for token:', error)
+      console.error('Error exchanging code:', error)
       throw error
+    }
+  }
+  
+  // Fetch user profile from backend (backend calls GitHub API with stored token)
+  const fetchUserProfile = async (refresh: boolean = false) => {
+    try {
+      const endpoint = refresh ? '/api/auth/user' : '/api/auth/user/cached'
+      const response: any = await $fetch(`${apiBaseUrl}${endpoint}`, {
+        method: 'GET',
+        credentials: 'include', // Important: include cookies for session
+      })
+      
+      user.value = response
+      return response
+    } catch (error: any) {
+      console.error('Error fetching user profile:', error)
+      if (error.status === 401) {
+        clearAuthState()
+      }
+      throw error
+    }
+  }
+  
+  // Check authentication status
+  const checkAuthStatus = async () => {
+    try {
+      const response: any = await $fetch(`${apiBaseUrl}/api/auth/check`, {
+        method: 'GET',
+        credentials: 'include',
+      })
+      
+      if (response.authenticated && response.userId) {
+        userId.value = response.userId
+        user.value = response.user
+        
+        // Save userId to localStorage
+        if (process.client) {
+          localStorage.setItem('github_user_id', response.userId)
+        }
+        
+        return true
+      } else {
+        clearAuthState()
+        return false
+      }
+    } catch (error) {
+      console.error('Error checking auth status:', error)
+      clearAuthState()
+      return false
     }
   }
   
@@ -112,15 +162,15 @@ export const useAuth = () => {
             }
             
             try {
-              // Exchange code for token
-              const tokenData = await exchangeCodeForToken(code, state)
+              // Exchange code - backend stores token and returns userId
+              const data = await exchangeCodeForUserId(code, state)
               
-              // Save auth state
-              saveAuthState(tokenData.accessToken, tokenData.user)
+              // Save only userId (token is stored in backend database)
+              saveAuthState(data.userId, data.user)
               
               window.removeEventListener('message', messageHandler)
               popup.close()
-              resolve(tokenData.user)
+              resolve(data.user)
             } catch (error) {
               window.removeEventListener('message', messageHandler)
               popup.close()
@@ -150,55 +200,44 @@ export const useAuth = () => {
     })
   }
   
-  // Verify token
-  const verifyToken = async (token: string) => {
+  // Logout
+  const logout = async () => {
     try {
-      const response = await $fetch(`${apiBaseUrl}/api/auth/verify`, {
-        method: 'GET',
-        headers: {
-          Authorization: `Bearer ${token}`,
-        },
+      await $fetch(`${apiBaseUrl}/api/auth/logout`, {
+        method: 'POST',
+        credentials: 'include',
       })
-      return response
+      clearAuthState()
     } catch (error) {
-      console.error('Error verifying token:', error)
+      console.error('Error during logout:', error)
+      // Clear local state anyway
+      clearAuthState()
+    }
+  }
+  
+  // Refresh user data from GitHub
+  const refreshUserData = async () => {
+    try {
+      await fetchUserProfile(true)
+    } catch (error) {
+      console.error('Error refreshing user data:', error)
       throw error
     }
   }
   
-  // Logout
-  const logout = () => {
-    clearAuthState()
-  }
-  
-  // Check if current token is valid
-  const checkAuthStatus = async () => {
-    if (accessToken.value) {
-      try {
-        const userData = await verifyToken(accessToken.value)
-        if (userData) {
-          user.value = userData
-          return true
-        }
-      } catch (error) {
-        clearAuthState()
-      }
-    }
-    return false
-  }
-  
   return {
     user,
-    accessToken,
+    userId,
     isAuthenticated,
     loadAuthState,
     saveAuthState,
     clearAuthState,
     getAuthorizationUrl,
-    exchangeCodeForToken,
+    exchangeCodeForUserId,
     loginWithPopup,
-    verifyToken,
     logout,
     checkAuthStatus,
+    fetchUserProfile,
+    refreshUserData,
   }
 }

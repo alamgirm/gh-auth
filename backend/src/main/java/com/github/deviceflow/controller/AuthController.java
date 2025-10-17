@@ -1,8 +1,8 @@
 package com.github.deviceflow.controller;
 
-import com.github.deviceflow.model.AccessTokenResponse;
 import com.github.deviceflow.model.GitHubUser;
 import com.github.deviceflow.service.GitHubAuthService;
+import jakarta.servlet.http.HttpSession;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.http.ResponseEntity;
@@ -45,11 +45,13 @@ public class AuthController {
     
     /**
      * Exchange authorization code for access token
-     * Frontend calls this after receiving the code from the popup callback
+     * Backend stores token in database and creates session
+     * Frontend receives only the userId (session identifier)
      */
     @PostMapping("/exchange-code")
     public ResponseEntity<Map<String, Object>> exchangeCode(
-            @RequestBody Map<String, String> request) {
+            @RequestBody Map<String, String> request,
+            HttpSession session) {
         String code = request.get("code");
         String state = request.get("state");
         
@@ -60,57 +62,120 @@ public class AuthController {
         }
         
         try {
-            // Exchange code for access token
-            AccessTokenResponse tokenResponse = authService.exchangeCodeForToken(code);
+            // Exchange code for access token and store in database
+            String userId = authService.exchangeCodeForToken(code);
             
-            if (tokenResponse.getAccessToken() == null) {
-                log.error("No access token in response");
-                return ResponseEntity.status(401).build();
-            }
+            // Store userId in session
+            session.setAttribute("userId", userId);
+            log.info("Session created for userId: {}", userId);
             
-            // Fetch user info
-            GitHubUser user = authService.fetchUserInfo(tokenResponse.getAccessToken());
+            // Get cached user profile
+            GitHubUser user = authService.getCachedUserProfile(userId);
             
             Map<String, Object> response = new HashMap<>();
-            response.put("accessToken", tokenResponse.getAccessToken());
-            response.put("tokenType", tokenResponse.getTokenType());
-            response.put("scope", tokenResponse.getScope());
+            response.put("userId", userId);
             response.put("user", user);
+            response.put("message", "Authentication successful");
             
             return ResponseEntity.ok(response);
             
         } catch (Exception e) {
             log.error("Error exchanging code for token", e);
-            return ResponseEntity.status(401).build();
+            return ResponseEntity.status(401).body(Map.of(
+                    "error", "Authentication failed",
+                    "message", e.getMessage()
+            ));
         }
     }
     
     /**
-     * Verify a token and get user info
-     * Frontend can use this to validate stored tokens
+     * Get current user info
+     * Uses userId from session to fetch data from GitHub
      */
-    @GetMapping("/verify")
-    public ResponseEntity<GitHubUser> verifyToken(
-            @RequestHeader("Authorization") String authHeader) {
-        log.info("Received token verification request");
+    @GetMapping("/user")
+    public ResponseEntity<GitHubUser> getCurrentUser(HttpSession session) {
+        String userId = (String) session.getAttribute("userId");
         
-        if (authHeader == null || !authHeader.startsWith("Bearer ")) {
-            return ResponseEntity.badRequest().build();
+        if (userId == null) {
+            log.warn("No userId in session");
+            return ResponseEntity.status(401).build();
         }
         
-        String token = authHeader.substring(7);
+        log.info("Getting user info for session userId: {}", userId);
         
         try {
-            GitHubUser user = authService.verifyToken(token);
+            GitHubUser user = authService.getUserInfo(userId);
             if (user != null) {
                 return ResponseEntity.ok(user);
             } else {
                 return ResponseEntity.status(401).build();
             }
         } catch (Exception e) {
-            log.error("Error verifying token", e);
+            log.error("Error getting user info", e);
+            // Token might be invalid - clear session
+            session.invalidate();
             return ResponseEntity.status(401).build();
         }
+    }
+    
+    /**
+     * Get cached user profile (doesn't call GitHub API)
+     */
+    @GetMapping("/user/cached")
+    public ResponseEntity<GitHubUser> getCachedUser(HttpSession session) {
+        String userId = (String) session.getAttribute("userId");
+        
+        if (userId == null) {
+            log.warn("No userId in session");
+            return ResponseEntity.status(401).build();
+        }
+        
+        log.info("Getting cached user info for userId: {}", userId);
+        
+        GitHubUser user = authService.getCachedUserProfile(userId);
+        if (user != null) {
+            return ResponseEntity.ok(user);
+        } else {
+            session.invalidate();
+            return ResponseEntity.status(401).build();
+        }
+    }
+    
+    /**
+     * Check if user is authenticated
+     */
+    @GetMapping("/check")
+    public ResponseEntity<Map<String, Object>> checkAuth(HttpSession session) {
+        String userId = (String) session.getAttribute("userId");
+        
+        Map<String, Object> response = new HashMap<>();
+        
+        if (userId != null && authService.hasValidToken(userId)) {
+            GitHubUser user = authService.getCachedUserProfile(userId);
+            response.put("authenticated", true);
+            response.put("userId", userId);
+            response.put("user", user);
+            return ResponseEntity.ok(response);
+        } else {
+            response.put("authenticated", false);
+            return ResponseEntity.ok(response);
+        }
+    }
+    
+    /**
+     * Logout - delete token from database and invalidate session
+     */
+    @PostMapping("/logout")
+    public ResponseEntity<Map<String, String>> logout(HttpSession session) {
+        String userId = (String) session.getAttribute("userId");
+        
+        if (userId != null) {
+            log.info("Logging out userId: {}", userId);
+            authService.deleteUserToken(userId);
+            session.invalidate();
+        }
+        
+        return ResponseEntity.ok(Map.of("message", "Logged out successfully"));
     }
     
     /**
