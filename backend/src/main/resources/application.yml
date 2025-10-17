@@ -6,12 +6,13 @@ spring:
     name: github-device-flow-backend
 
 github:
-  oauth:
+  app:
     client-id: ${GITHUB_CLIENT_ID}
     client-secret: ${GITHUB_CLIENT_SECRET}
-    device-code-url: https://github.com/login/device/code
+    authorize-url: https://github.com/login/oauth/authorize
     token-url: https://github.com/login/oauth/access_token
     user-api-url: https://api.github.com/user
+    redirect-uri: ${GITHUB_REDIRECT_URI:http://localhost:3000/auth/callback}
 
 # CORS configuration
 cors:

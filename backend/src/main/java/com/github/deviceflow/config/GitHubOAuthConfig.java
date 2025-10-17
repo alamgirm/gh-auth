@@ -6,13 +6,14 @@ import org.springframework.context.annotation.Configuration;
 
 @Data
 @Configuration
-@ConfigurationProperties(prefix = "github.oauth")
+@ConfigurationProperties(prefix = "github.app")
 public class GitHubOAuthConfig {
     
     private String clientId;
     private String clientSecret;
-    private String deviceCodeUrl;
+    private String authorizeUrl;
     private String tokenUrl;
     private String userApiUrl;
+    private String redirectUri;
 }
 

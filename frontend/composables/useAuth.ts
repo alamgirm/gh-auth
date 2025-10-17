@@ -39,33 +39,115 @@ export const useAuth = () => {
     }
   }
   
-  // Initiate device flow
-  const initiateDeviceFlow = async () => {
+  // Get authorization URL from backend
+  const getAuthorizationUrl = async () => {
     try {
-      const response = await $fetch(`${apiBaseUrl}/api/auth/device/code`, {
-        method: 'POST',
+      const response: any = await $fetch(`${apiBaseUrl}/api/auth/authorize-url`, {
+        method: 'GET',
       })
       return response
     } catch (error) {
-      console.error('Error initiating device flow:', error)
+      console.error('Error getting authorization URL:', error)
       throw error
     }
   }
   
-  // Poll for authorization
-  const pollForAuthorization = async (deviceCode: string) => {
+  // Exchange authorization code for token
+  const exchangeCodeForToken = async (code: string, state: string) => {
     try {
-      const response: any = await $fetch(
-        `${apiBaseUrl}/api/auth/device/poll?device_code=${deviceCode}`,
-        {
-          method: 'GET',
+      const response: any = await $fetch(`${apiBaseUrl}/api/auth/exchange-code`, {
+        method: 'POST',
+        body: {
+          code,
+          state
         }
-      )
+      })
       return response
     } catch (error) {
-      console.error('Error polling for authorization:', error)
+      console.error('Error exchanging code for token:', error)
       throw error
     }
+  }
+  
+  // Login with popup
+  const loginWithPopup = (): Promise<any> => {
+    return new Promise(async (resolve, reject) => {
+      try {
+        // Get authorization URL from backend
+        const { url, state } = await getAuthorizationUrl()
+        
+        // Open popup
+        const width = 600
+        const height = 700
+        const left = window.screen.width / 2 - width / 2
+        const top = window.screen.height / 2 - height / 2
+        
+        const popup = window.open(
+          url,
+          'GitHub Login',
+          `width=${width},height=${height},left=${left},top=${top},toolbar=no,menubar=no`
+        )
+        
+        if (!popup) {
+          reject(new Error('Failed to open popup. Please allow popups for this site.'))
+          return
+        }
+        
+        // Listen for messages from popup
+        const messageHandler = async (event: MessageEvent) => {
+          // Verify origin
+          if (event.origin !== window.location.origin) {
+            return
+          }
+          
+          if (event.data.type === 'github-auth-success') {
+            const { code, receivedState } = event.data
+            
+            // Verify state matches
+            if (receivedState !== state) {
+              window.removeEventListener('message', messageHandler)
+              popup.close()
+              reject(new Error('State mismatch - possible CSRF attack'))
+              return
+            }
+            
+            try {
+              // Exchange code for token
+              const tokenData = await exchangeCodeForToken(code, state)
+              
+              // Save auth state
+              saveAuthState(tokenData.accessToken, tokenData.user)
+              
+              window.removeEventListener('message', messageHandler)
+              popup.close()
+              resolve(tokenData.user)
+            } catch (error) {
+              window.removeEventListener('message', messageHandler)
+              popup.close()
+              reject(error)
+            }
+          } else if (event.data.type === 'github-auth-error') {
+            window.removeEventListener('message', messageHandler)
+            popup.close()
+            reject(new Error(event.data.error || 'Authentication failed'))
+          }
+        }
+        
+        window.addEventListener('message', messageHandler)
+        
+        // Check if popup was closed
+        const checkPopupClosed = setInterval(() => {
+          if (popup.closed) {
+            clearInterval(checkPopupClosed)
+            window.removeEventListener('message', messageHandler)
+            reject(new Error('Popup was closed'))
+          }
+        }, 1000)
+        
+      } catch (error) {
+        reject(error)
+      }
+    })
   }
   
   // Verify token
@@ -112,11 +194,11 @@ export const useAuth = () => {
     loadAuthState,
     saveAuthState,
     clearAuthState,
-    initiateDeviceFlow,
-    pollForAuthorization,
+    getAuthorizationUrl,
+    exchangeCodeForToken,
+    loginWithPopup,
     verifyToken,
     logout,
     checkAuthStatus,
   }
 }
-

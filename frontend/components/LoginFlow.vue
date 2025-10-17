@@ -1,7 +1,7 @@
 <template>
   <div class="login-flow">
-    <!-- Step 1: Start Authentication -->
-    <div v-if="step === 'start'" class="text-center">
+    <!-- Login State -->
+    <div v-if="!loading && !error" class="text-center">
       <div class="mb-6">
         <svg class="w-20 h-20 mx-auto text-gray-700" fill="currentColor" viewBox="0 0 24 24">
           <path d="M12 0c-6.626 0-12 5.373-12 12 0 5.302 3.438 9.8 8.207 11.387.599.111.793-.261.793-.577v-2.234c-3.338.726-4.033-1.416-4.033-1.416-.546-1.387-1.333-1.756-1.333-1.756-1.089-.745.083-.729.083-.729 1.205.084 1.839 1.237 1.839 1.237 1.07 1.834 2.807 1.304 3.492.997.107-.775.418-1.305.762-1.604-2.665-.305-5.467-1.334-5.467-5.931 0-1.311.469-2.381 1.236-3.221-.124-.303-.535-1.524.117-3.176 0 0 1.008-.322 3.301 1.23.957-.266 1.983-.399 3.003-.404 1.02.005 2.047.138 3.006.404 2.291-1.552 3.297-1.23 3.297-1.23.653 1.653.242 2.874.118 3.176.77.84 1.235 1.911 1.235 3.221 0 4.609-2.807 5.624-5.479 5.921.43.372.823 1.102.823 2.222v3.293c0 .319.192.694.801.576 4.765-1.589 8.199-6.086 8.199-11.386 0-6.627-5.373-12-12-12z"/>
@@ -13,98 +13,44 @@
       </h2>
       
       <p class="text-gray-600 mb-6">
-        Click below to start the secure device flow authentication process
+        Click below to login securely with your GitHub account
       </p>
       
       <button
-        @click="startDeviceFlow"
-        :disabled="loading"
-        class="bg-gray-800 hover:bg-gray-900 text-white font-semibold py-3 px-8 rounded-lg transition duration-200 disabled:opacity-50 disabled:cursor-not-allowed"
+        @click="handleLogin"
+        class="bg-gray-800 hover:bg-gray-900 text-white font-semibold py-3 px-8 rounded-lg transition duration-200 inline-flex items-center"
       >
-        <span v-if="loading">Starting...</span>
-        <span v-else>Login with GitHub</span>
+        <svg class="w-5 h-5 mr-2" fill="currentColor" viewBox="0 0 24 24">
+          <path d="M12 0c-6.626 0-12 5.373-12 12 0 5.302 3.438 9.8 8.207 11.387.599.111.793-.261.793-.577v-2.234c-3.338.726-4.033-1.416-4.033-1.416-.546-1.387-1.333-1.756-1.333-1.756-1.089-.745.083-.729.083-.729 1.205.084 1.839 1.237 1.839 1.237 1.07 1.834 2.807 1.304 3.492.997.107-.775.418-1.305.762-1.604-2.665-.305-5.467-1.334-5.467-5.931 0-1.311.469-2.381 1.236-3.221-.124-.303-.535-1.524.117-3.176 0 0 1.008-.322 3.301 1.23.957-.266 1.983-.399 3.003-.404 1.02.005 2.047.138 3.006.404 2.291-1.552 3.297-1.23 3.297-1.23.653 1.653.242 2.874.118 3.176.77.84 1.235 1.911 1.235 3.221 0 4.609-2.807 5.624-5.479 5.921.43.372.823 1.102.823 2.222v3.293c0 .319.192.694.801.576 4.765-1.589 8.199-6.086 8.199-11.386 0-6.627-5.373-12-12-12z"/>
+        </svg>
+        Login with GitHub
       </button>
+      
+      <p class="text-sm text-gray-500 mt-4">
+        A secure popup will open for authentication
+      </p>
     </div>
     
-    <!-- Step 2: Show Device Code -->
-    <div v-else-if="step === 'show-code'" class="text-center">
-      <h2 class="text-2xl font-bold text-gray-800 mb-2">
-        Enter This Code on GitHub
-      </h2>
-      
-      <p class="text-sm text-gray-500 mb-4">
-        Copy the code below and paste it when prompted
-      </p>
-      
-      <div class="bg-gradient-to-br from-purple-50 to-blue-50 border-2 border-purple-300 rounded-lg p-8 mb-6 shadow-inner">
-        <div class="text-6xl font-mono font-bold text-purple-700 mb-4 tracking-widest select-all">
-          {{ userCode || 'Loading...' }}
-        </div>
-        <button
-          @click="copyCode"
-          class="bg-purple-600 hover:bg-purple-700 text-white font-semibold py-2 px-6 rounded-lg transition duration-200 shadow-md"
-        >
-          {{ copied ? '✓ Code Copied!' : '📋 Copy Code' }}
-        </button>
-      </div>
-      
-      <div class="mb-6">
-        <p class="text-gray-700 mb-3">
-          1. Click the button below to open GitHub
-        </p>
-        <a
-          :href="verificationUri"
-          target="_blank"
-          class="inline-block bg-green-500 hover:bg-green-600 text-white font-semibold py-3 px-6 rounded-lg transition duration-200"
-        >
-          Open GitHub →
-        </a>
-      </div>
-      
-      <p class="text-gray-600 text-sm mb-4">
-        2. Paste the code above when prompted
-      </p>
-      
-      <div class="flex flex-col items-center justify-center text-gray-600">
-        <div class="flex items-center mb-2">
-          <svg class="animate-spin h-5 w-5 mr-2" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
-            <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
-            <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
-          </svg>
-          Waiting for authorization...
-        </div>
-        <div v-if="timeRemaining" class="text-sm text-gray-500">
-          Time remaining: {{ formatTime(timeRemaining) }}
-        </div>
-      </div>
-      
-      <button
-        @click="cancelAuth"
-        class="mt-6 text-gray-500 hover:text-gray-700 text-sm"
-      >
-        Cancel
-      </button>
-    </div>
-    
-    <!-- Step 3: Success -->
-    <div v-else-if="step === 'success'" class="text-center">
+    <!-- Loading State -->
+    <div v-else-if="loading" class="text-center">
       <div class="mb-4">
-        <svg class="w-20 h-20 mx-auto text-green-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z"></path>
+        <svg class="animate-spin h-12 w-12 mx-auto text-purple-600" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+          <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
+          <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
         </svg>
       </div>
       
       <h2 class="text-2xl font-bold text-gray-800 mb-4">
-        Authentication Successful!
+        Authenticating...
       </h2>
       
       <p class="text-gray-600">
-        Welcome back, you're now logged in.
+        Please complete the login in the popup window
       </p>
     </div>
     
     <!-- Error State -->
-    <div v-else-if="step === 'error'" class="text-center">
+    <div v-else-if="error" class="text-center">
       <div class="mb-4">
         <svg class="w-20 h-20 mx-auto text-red-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
           <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10 14l2-2m0 0l2-2m-2 2l-2-2m2 2l2 2m7-2a9 9 0 11-18 0 9 9 0 0118 0z"></path>
@@ -120,7 +66,7 @@
       </p>
       
       <button
-        @click="resetFlow"
+        @click="resetAndRetry"
         class="bg-gray-800 hover:bg-gray-900 text-white font-semibold py-3 px-6 rounded-lg transition duration-200"
       >
         Try Again
@@ -132,182 +78,38 @@
 <script setup lang="ts">
 const emit = defineEmits(['authenticated'])
 
-const { initiateDeviceFlow, pollForAuthorization, saveAuthState } = useAuth()
+const { loginWithPopup } = useAuth()
 
-const step = ref<'start' | 'show-code' | 'success' | 'error'>('start')
 const loading = ref(false)
-const userCode = ref('')
-const verificationUri = ref('')
-const deviceCode = ref('')
-const copied = ref(false)
+const error = ref(false)
 const errorMessage = ref('')
-let pollInterval: any = null
-let pollStartTime: number = 0
-let timerInterval: any = null
-const maxPollDuration = 15 * 60 * 1000 // 15 minutes timeout
-const timeRemaining = ref(0)
-const expiresIn = ref(900) // Default 15 minutes in seconds
 
-const startDeviceFlow = async () => {
+const handleLogin = async () => {
   loading.value = true
+  error.value = false
   errorMessage.value = ''
   
   try {
-    const response: any = await initiateDeviceFlow()
+    const user = await loginWithPopup()
+    console.log('Login successful:', user)
     
-    console.log('Device flow response:', response)
+    // Small delay to show success before transitioning
+    await new Promise(resolve => setTimeout(resolve, 500))
     
-    // Handle both camelCase and snake_case from backend
-    userCode.value = response.userCode || response.user_code || ''
-    verificationUri.value = response.verificationUri || response.verification_uri || ''
-    deviceCode.value = response.deviceCode || response.device_code || ''
-    expiresIn.value = response.expiresIn || response.expires_in || 900
+    emit('authenticated')
     
-    console.log('User Code:', userCode.value)
-    console.log('Verification URI:', verificationUri.value)
-    console.log('Device Code:', deviceCode.value)
-    console.log('Expires In:', expiresIn.value + 's')
-    
-    if (!userCode.value || !deviceCode.value) {
-      throw new Error('Invalid response from backend - missing required fields')
-    }
-    
-    step.value = 'show-code'
-    
-    // Start countdown timer
-    startCountdownTimer()
-    
-    // Start polling for authorization - wait at least 10 seconds between polls
-    const pollInterval = Math.max(response.interval || 10, 10)
-    startPolling(pollInterval)
-    
-  } catch (error) {
-    console.error('Error starting device flow:', error)
-    errorMessage.value = 'Failed to start authentication. Please try again.'
-    step.value = 'error'
+  } catch (err: any) {
+    console.error('Login failed:', err)
+    error.value = true
+    errorMessage.value = err.message || 'Failed to authenticate. Please try again.'
   } finally {
     loading.value = false
   }
 }
 
-const startPolling = (intervalSeconds: number) => {
-  pollStartTime = Date.now()
-  console.log(`Starting polling with ${intervalSeconds} second interval`)
-  
-  pollInterval = setInterval(async () => {
-    try {
-      // Check if we've exceeded the max polling duration (15 minutes)
-      const elapsed = Date.now() - pollStartTime
-      if (elapsed > maxPollDuration) {
-        clearInterval(pollInterval)
-        errorMessage.value = 'Authorization timed out. The device code has expired. Please try again.'
-        step.value = 'error'
-        return
-      }
-      
-      console.log('Polling for authorization...', { elapsed: Math.round(elapsed / 1000) + 's' })
-      const response = await pollForAuthorization(deviceCode.value)
-      console.log('Poll response:', response)
-      
-      if (response.status === 'authorized') {
-        // Success!
-        console.log('Authorization successful!')
-        clearInterval(pollInterval)
-        if (timerInterval) {
-          clearInterval(timerInterval)
-        }
-        saveAuthState(response.accessToken, response.user)
-        step.value = 'success'
-        
-        // Emit authenticated event
-        setTimeout(() => {
-          emit('authenticated')
-        }, 1500)
-        
-      } else if (response.status === 'expired') {
-        console.log('Device code expired')
-        clearInterval(pollInterval)
-        errorMessage.value = response.message || 'Device code expired. Please try again.'
-        step.value = 'error'
-        
-      } else if (response.status === 'error') {
-        console.log('Authorization error:', response.message)
-        clearInterval(pollInterval)
-        errorMessage.value = response.message || 'Authentication failed'
-        step.value = 'error'
-        
-      } else if (response.status === 'pending') {
-        // Continue polling - this is normal
-        console.log('Authorization pending, will check again...')
-      }
-      
-    } catch (error) {
-      console.error('Polling error:', error)
-      clearInterval(pollInterval)
-      errorMessage.value = 'Connection error. Please try again.'
-      step.value = 'error'
-    }
-  }, intervalSeconds * 1000)
-}
-
-const copyCode = () => {
-  if (process.client) {
-    navigator.clipboard.writeText(userCode.value)
-    copied.value = true
-    setTimeout(() => {
-      copied.value = false
-    }, 2000)
-  }
-}
-
-const startCountdownTimer = () => {
-  timeRemaining.value = expiresIn.value
-  
-  timerInterval = setInterval(() => {
-    timeRemaining.value--
-    if (timeRemaining.value <= 0) {
-      clearInterval(timerInterval)
-      if (pollInterval) {
-        clearInterval(pollInterval)
-      }
-      errorMessage.value = 'Device code has expired. Please try again.'
-      step.value = 'error'
-    }
-  }, 1000)
-}
-
-const formatTime = (seconds: number) => {
-  const minutes = Math.floor(seconds / 60)
-  const secs = seconds % 60
-  return `${minutes}:${secs.toString().padStart(2, '0')}`
-}
-
-const cancelAuth = () => {
-  if (pollInterval) {
-    clearInterval(pollInterval)
-  }
-  if (timerInterval) {
-    clearInterval(timerInterval)
-  }
-  resetFlow()
-}
-
-const resetFlow = () => {
-  step.value = 'start'
-  userCode.value = ''
-  verificationUri.value = ''
-  deviceCode.value = ''
+const resetAndRetry = () => {
+  error.value = false
   errorMessage.value = ''
-  timeRemaining.value = 0
+  handleLogin()
 }
-
-onUnmounted(() => {
-  if (pollInterval) {
-    clearInterval(pollInterval)
-  }
-  if (timerInterval) {
-    clearInterval(timerInterval)
-  }
-})
 </script>
-
