@@ -12,10 +12,13 @@ import lombok.NoArgsConstructor;
 public class AuthStatus {
     
     private boolean azureAuthenticated;
-    private boolean githubConnected;
+    private boolean ghecConnected;
+    private boolean ghesConnected;
+    private boolean ghesEnabled;
     
     private GitHubUser azureUser;
-    private GitHubUser githubUser;
+    private GitHubUser ghecUser;
+    private GitHubUser ghesUser;
     
     private String message;
 }

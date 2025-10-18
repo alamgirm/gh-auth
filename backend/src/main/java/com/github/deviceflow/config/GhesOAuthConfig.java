@@ -6,9 +6,10 @@ import org.springframework.context.annotation.Configuration;
 
 @Data
 @Configuration
-@ConfigurationProperties(prefix = "github.app")
-public class GitHubOAuthConfig {
+@ConfigurationProperties(prefix = "ghes.app")
+public class GhesOAuthConfig {
     
+    private String baseUrl;
     private String clientId;
     private String clientSecret;
     private String authorizeUrl;

@@ -3,12 +3,15 @@ export const useMultiAuth = () => {
   const apiBaseUrl = config.public.apiBaseUrl
   
   const azureUser = useState<any>('azureUser', () => null)
-  const githubUser = useState<any>('githubUser', () => null)
+  const ghecUser = useState<any>('ghecUser', () => null)
+  const ghesUser = useState<any>('ghesUser', () => null)
   const azureToken = useState<string | null>('azureToken', () => null)
   const isAzureAuthenticated = computed(() => !!azureUser.value && !!azureToken.value)
-  const isGitHubConnected = useState<boolean>('isGitHubConnected', () => false)
+  const isGhecConnected = useState<boolean>('isGhecConnected', () => false)
+  const isGhesConnected = useState<boolean>('isGhesConnected', () => false)
+  const ghesEnabled = useState<boolean>('ghesEnabled', () => false)
   
-  const { loginWithAzure, getCurrentAccount } = useAzureAuth()
+  const { loginWithAzure } = useAzureAuth()
   
   // Get Azure token from MSAL
   const getAzureToken = async () => {
@@ -55,7 +58,7 @@ export const useMultiAuth = () => {
         if (token) {
           azureToken.value = token
         }
-        await checkGitHubConnection()
+        await checkAuthStatus()
         return result.user
       }
       
@@ -80,7 +83,7 @@ export const useMultiAuth = () => {
         if (token) {
           azureToken.value = token
         }
-        await checkGitHubConnection()
+        await checkAuthStatus()
         return response.user
       }
       
@@ -110,10 +113,16 @@ export const useMultiAuth = () => {
       if (response.azureAuthenticated) {
         azureUser.value = response.azureUser
         azureToken.value = token
-        isGitHubConnected.value = response.githubConnected
+        isGhecConnected.value = response.ghecConnected
+        isGhesConnected.value = response.ghesConnected
+        ghesEnabled.value = response.ghesEnabled
         
-        if (response.githubUser) {
-          githubUser.value = response.githubUser
+        if (response.ghecUser) {
+          ghecUser.value = response.ghecUser
+        }
+        
+        if (response.ghesUser) {
+          ghesUser.value = response.ghesUser
         }
         
         return true
@@ -126,8 +135,8 @@ export const useMultiAuth = () => {
     }
   }
   
-  // Connect GitHub account (secondary/optional)
-  const connectGitHub = (): Promise<any> => {
+  // Connect GitHub account (Ghec or Ghes)
+  const connectGitHub = (provider: 'ghec' | 'ghes'): Promise<any> => {
     return new Promise(async (resolve, reject) => {
       try {
         const token = await getAzureToken()
@@ -138,7 +147,7 @@ export const useMultiAuth = () => {
         }
         
         // Get GitHub OAuth URL
-        const response: any = await $fetch(`${apiBaseUrl}/api/auth/github/authorize-url`, {
+        const response: any = await $fetch(`${apiBaseUrl}/api/auth/github/${provider}/authorize-url`, {
           method: 'GET',
           headers: {
             Authorization: `Bearer ${token}`
@@ -155,7 +164,7 @@ export const useMultiAuth = () => {
         
         const popup = window.open(
           url,
-          'GitHub Connect',
+          `${provider.toUpperCase()} Connect`,
           `width=${width},height=${height},left=${left},top=${top},toolbar=no,menubar=no`
         )
         
@@ -172,7 +181,7 @@ export const useMultiAuth = () => {
             return
           }
           
-          if (event.data.type === 'github-auth-success') {
+          if (event.data.type === 'github-auth-success' && event.data.provider === provider) {
             const { code, receivedState } = event.data
             
             // Stop checking if popup is closed - we got the message!
@@ -190,7 +199,7 @@ export const useMultiAuth = () => {
             
             try {
               // Link GitHub account
-              const linkResponse: any = await $fetch(`${apiBaseUrl}/api/auth/github/link`, {
+              const linkResponse: any = await $fetch(`${apiBaseUrl}/api/auth/github/${provider}/link`, {
                 method: 'POST',
                 headers: {
                   Authorization: `Bearer ${token}`
@@ -198,8 +207,13 @@ export const useMultiAuth = () => {
                 body: { code }
               })
               
-              githubUser.value = linkResponse.githubUser
-              isGitHubConnected.value = true
+              if (provider === 'ghec') {
+                ghecUser.value = linkResponse.githubUser
+                isGhecConnected.value = true
+              } else {
+                ghesUser.value = linkResponse.githubUser
+                isGhesConnected.value = true
+              }
               
               window.removeEventListener('message', messageHandler)
               popup.close()
@@ -239,45 +253,28 @@ export const useMultiAuth = () => {
     })
   }
   
-  // Check if GitHub is connected
-  const checkGitHubConnection = async () => {
+  // Disconnect GitHub (Ghec or Ghes)
+  const disconnectGitHub = async (provider: 'ghec' | 'ghes') => {
     try {
       const token = await getAzureToken()
       if (!token) return
       
-      const response: any = await $fetch(`${apiBaseUrl}/api/auth/status`, {
-        method: 'GET',
-        headers: {
-          Authorization: `Bearer ${token}`
-        }
-      })
-      
-      isGitHubConnected.value = response.githubConnected
-      if (response.githubUser) {
-        githubUser.value = response.githubUser
-      }
-    } catch (error) {
-      console.error('Error checking GitHub connection:', error)
-    }
-  }
-  
-  // Disconnect GitHub
-  const disconnectGitHub = async () => {
-    try {
-      const token = await getAzureToken()
-      if (!token) return
-      
-      await $fetch(`${apiBaseUrl}/api/auth/github/unlink`, {
+      await $fetch(`${apiBaseUrl}/api/auth/github/${provider}/unlink`, {
         method: 'POST',
         headers: {
           Authorization: `Bearer ${token}`
         }
       })
       
-      isGitHubConnected.value = false
-      githubUser.value = null
+      if (provider === 'ghec') {
+        isGhecConnected.value = false
+        ghecUser.value = null
+      } else {
+        isGhesConnected.value = false
+        ghesUser.value = null
+      }
     } catch (error) {
-      console.error('Error disconnecting GitHub:', error)
+      console.error(`Error disconnecting ${provider}:`, error)
       throw error
     }
   }
@@ -290,8 +287,10 @@ export const useMultiAuth = () => {
       await logoutAzure()
       azureUser.value = null
       azureToken.value = null
-      githubUser.value = null
-      isGitHubConnected.value = false
+      ghecUser.value = null
+      ghesUser.value = null
+      isGhecConnected.value = false
+      isGhesConnected.value = false
     } catch (error) {
       console.error('Error during logout:', error)
     }
@@ -299,13 +298,15 @@ export const useMultiAuth = () => {
   
   return {
     azureUser,
-    githubUser,
+    ghecUser,
+    ghesUser,
     isAzureAuthenticated,
-    isGitHubConnected,
+    isGhecConnected,
+    isGhesConnected,
+    ghesEnabled,
     loginWithMicrosoft,
     connectGitHub,
     disconnectGitHub,
-    checkGitHubConnection,
     handleAzureRedirect,
     checkAuthStatus,
     logout,

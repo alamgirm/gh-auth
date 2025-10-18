@@ -27,14 +27,20 @@
           <UserProfile v-if="azureUser" :user="azureUser" />
         </div>
         
-        <!-- GitHub Connection Status -->
+        <!-- GitHub Connections Status (Ghec and Ghes) -->
         <div class="mb-6">
-          <GitHubConnection
-            :is-connected="isGitHubConnected"
-            :github-user="githubUser"
-            :is-connecting="isConnecting"
-            @connect="handleConnectGitHub"
-            @disconnect="handleDisconnectGitHub"
+          <GitHubConnections
+            :is-ghec-connected="isGhecConnected"
+            :is-ghes-connected="isGhesConnected"
+            :ghec-user="ghecUser"
+            :ghes-user="ghesUser"
+            :ghes-enabled="ghesEnabled"
+            :is-connecting-ghec="isConnectingGhec"
+            :is-connecting-ghes="isConnectingGhes"
+            :is-disconnecting-ghec="isDisconnectingGhec"
+            :is-disconnecting-ghes="isDisconnectingGhes"
+            @connect="handleConnect"
+            @disconnect="handleDisconnect"
           />
         </div>
         
@@ -53,7 +59,8 @@
           <p class="font-semibold mb-2">🔒 Security Architecture:</p>
           <ul class="list-disc list-inside space-y-1 text-xs">
             <li><strong>Azure:</strong> Token managed by MSAL in browser, sent with each request</li>
-            <li><strong>GitHub:</strong> Token stored securely on backend (only if connected)</li>
+            <li><strong>Ghec:</strong> Token stored securely on backend (only if connected)</li>
+            <li v-if="ghesEnabled"><strong>Ghes:</strong> Token stored securely on backend (only if connected)</li>
             <li><strong>API Calls:</strong> Backend validates Azure token and proxies GitHub requests</li>
           </ul>
         </div>
@@ -67,7 +74,8 @@
           <p class="font-semibold mb-2">ℹ️ About this application:</p>
           <ul class="list-disc list-inside space-y-1 text-xs">
             <li><strong>Primary:</strong> Microsoft Azure Entra ID (required)</li>
-            <li><strong>Optional:</strong> GitHub integration for repository features</li>
+            <li><strong>Optional:</strong> Ghec (github.com) integration</li>
+            <li v-if="ghesEnabled"><strong>Optional:</strong> Ghes (Enterprise Server) integration</li>
             <li><strong>Security:</strong> Tokens handled appropriately by each provider</li>
           </ul>
         </div>
@@ -79,55 +87,80 @@
 <script setup lang="ts">
 const { 
   azureUser, 
-  githubUser, 
+  ghecUser,
+  ghesUser,
   isAzureAuthenticated, 
-  isGitHubConnected,
+  isGhecConnected,
+  isGhesConnected,
+  ghesEnabled,
   connectGitHub,
   disconnectGitHub,
   logout,
   checkAuthStatus
 } = useMultiAuth()
 
-// Note: Auth check happens in app.vue on mount
-// No need to duplicate here
+const isConnectingGhec = ref(false)
+const isConnectingGhes = ref(false)
+const isDisconnectingGhec = ref(false)
+const isDisconnectingGhes = ref(false)
 
-const isConnecting = ref(false)
-
-const handleConnectGitHub = async () => {
-  if (isConnecting.value) return // Prevent double-click
+const handleConnect = async (provider: 'ghec' | 'ghes') => {
+  if (provider === 'ghec') {
+    if (isConnectingGhec.value) return
+    isConnectingGhec.value = true
+  } else {
+    if (isConnectingGhes.value) return
+    isConnectingGhes.value = true
+  }
   
-  isConnecting.value = true
   try {
-    await connectGitHub()
-    console.log('GitHub connected successfully')
+    await connectGitHub(provider)
+    console.log(`${provider.toUpperCase()} connected successfully`)
   } catch (error: any) {
-    console.error('Failed to connect GitHub:', error)
+    console.error(`Failed to connect ${provider}:`, error)
     
-    // Check if GitHub was actually connected despite the error
-    // (e.g., popup closed after successful auth but before promise resolved)
+    // Check if actually connected despite error
     await new Promise(resolve => setTimeout(resolve, 500))
     await checkAuthStatus()
     
-    if (!isGitHubConnected.value) {
-      // Still not connected, show the error
-      alert(error.message || 'Failed to connect GitHub account')
+    const isConnected = provider === 'ghec' ? isGhecConnected.value : isGhesConnected.value
+    
+    if (!isConnected) {
+      alert(error.message || `Failed to connect ${provider.toUpperCase()} account`)
     } else {
-      // Actually connected, ignore the error
-      console.log('GitHub connected successfully (despite error)')
+      console.log(`${provider.toUpperCase()} connected successfully (despite error)`)
     }
   } finally {
-    isConnecting.value = false
+    if (provider === 'ghec') {
+      isConnectingGhec.value = false
+    } else {
+      isConnectingGhes.value = false
+    }
   }
 }
 
-const handleDisconnectGitHub = async () => {
-  if (confirm('Are you sure you want to disconnect your GitHub account?')) {
+const handleDisconnect = async (provider: 'ghec' | 'ghes') => {
+  const providerName = provider === 'ghec' ? 'Ghec (github.com)' : 'Ghes (Enterprise Server)'
+  
+  if (confirm(`Are you sure you want to disconnect your ${providerName} account?`)) {
+    if (provider === 'ghec') {
+      isDisconnectingGhec.value = true
+    } else {
+      isDisconnectingGhes.value = true
+    }
+    
     try {
-      await disconnectGitHub()
-      console.log('GitHub disconnected successfully')
+      await disconnectGitHub(provider)
+      console.log(`${provider.toUpperCase()} disconnected successfully`)
     } catch (error) {
-      console.error('Failed to disconnect GitHub:', error)
-      alert('Failed to disconnect GitHub account')
+      console.error(`Failed to disconnect ${provider}:`, error)
+      alert(`Failed to disconnect ${provider.toUpperCase()} account`)
+    } finally {
+      if (provider === 'ghec') {
+        isDisconnectingGhec.value = false
+      } else {
+        isDisconnectingGhes.value = false
+      }
     }
   }
 }

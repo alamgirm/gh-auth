@@ -26,24 +26,36 @@ spring:
       enabled: true
       path: /h2-console
 
-github:
+# GitHub Enterprise Cloud (github.com)
+ghec:
   app:
-    client-id: ${GITHUB_CLIENT_ID:Iv23liqRwUp1z3IgnKe3}
-    client-secret: ${GITHUB_CLIENT_SECRET:}
+    client-id: ${GHEC_CLIENT_ID:Iv23liqRwUp1z3IgnKe3}
+    client-secret: ${GHEC_CLIENT_SECRET:}
     authorize-url: https://github.com/login/oauth/authorize
     token-url: https://github.com/login/oauth/access_token
     user-api-url: https://api.github.com/user
-    redirect-uri: ${GITHUB_REDIRECT_URI:http://localhost:3000/auth/callback}
+    redirect-uri: ${GHEC_REDIRECT_URI:http://localhost:3000/auth/callback/ghec}
+
+# GitHub Enterprise Server (self-hosted) - Optional
+ghes:
+  app:
+    base-url: ${GHES_BASE_URL:}
+    client-id: ${GHES_CLIENT_ID:}
+    client-secret: ${GHES_CLIENT_SECRET:}
+    authorize-url: ${GHES_BASE_URL:}/login/oauth/authorize
+    token-url: ${GHES_BASE_URL:}/login/oauth/access_token
+    user-api-url: ${GHES_BASE_URL:}/api/v3/user
+    redirect-uri: ${GHES_REDIRECT_URI:http://localhost:3000/auth/callback/ghes}
 
 # Azure Entra ID (formerly Azure AD) configuration
 azure:
   entra:
     client-id: ${BE_CLIENT_ID:5640aba4-729d-4e6f-a34d-86beccf78df5}
     tenant-id: ${BE_TENANT_ID:a95973d1-dd8e-4baa-af11-d18f9863793b}
-    authority: ${AZURE_AUTHORITY:https://login.microsoftonline.com/${AZURE_TENANT_ID:common}}
-    jwks-uri: ${AZURE_JWKS_URI:https://login.microsoftonline.com/${AZURE_TENANT_ID:common}/discovery/v2.0/keys}
-    issuer: ${AZURE_ISSUER:https://login.microsoftonline.com/${AZURE_TENANT_ID:common}/v2.0}
-    expected-audience: ${AZURE_EXPECTED_AUDIENCE:api://${AZURE_CLIENT_ID}}
+    authority: ${AZURE_AUTHORITY:https://login.microsoftonline.com/${BE_TENANT_ID:a95973d1-dd8e-4baa-af11-d18f9863793b}}
+    jwks-uri: ${AZURE_JWKS_URI:https://login.microsoftonline.com/${BE_TENANT_ID:a95973d1-dd8e-4baa-af11-d18f9863793b}/discovery/v2.0/keys}
+    issuer: ${AZURE_ISSUER:https://login.microsoftonline.com/${BE_TENANT_ID:a95973d1-dd8e-4baa-af11-d18f9863793b}/v2.0}
+    expected-audience: ${AZURE_EXPECTED_AUDIENCE:api://${BE_CLIENT_ID:5640aba4-729d-4e6f-a34d-86beccf78df5}}
 
 # CORS configuration
 cors:

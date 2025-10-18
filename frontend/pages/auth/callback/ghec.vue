@@ -1,14 +1,14 @@
 <template>
-  <div class="min-h-screen flex items-center justify-center bg-gradient-to-br from-purple-600 to-blue-500 p-4">
+  <div class="min-h-screen flex items-center justify-center bg-gradient-to-br from-gray-800 to-gray-900 p-4">
     <div class="bg-white rounded-lg shadow-2xl p-8 max-w-md w-full text-center">
       <div v-if="status === 'processing'" class="text-center">
-        <svg class="animate-spin h-12 w-12 mx-auto text-purple-600 mb-4" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+        <svg class="animate-spin h-12 w-12 mx-auto text-gray-800 mb-4" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
           <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
           <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
         </svg>
         
         <h2 class="text-2xl font-bold text-gray-800 mb-2">
-          Completing Authentication
+          Completing Ghec Authentication
         </h2>
         
         <p class="text-gray-600">
@@ -57,33 +57,28 @@ const errorMessage = ref('')
 
 onMounted(() => {
   try {
-    // Get the URL parameters
+    const provider = 'ghec'
     const urlParams = new URLSearchParams(window.location.search)
     const code = urlParams.get('code')
     const state = urlParams.get('state')
     const error = urlParams.get('error')
     const errorDescription = urlParams.get('error_description')
     
-    console.log('Callback received:', { code, state, error })
+    console.log('Ghec callback received:', { code, state, error })
     
     if (error) {
-      // GitHub returned an error
       status.value = 'error'
       errorMessage.value = errorDescription || error || 'Authentication failed'
       
-      // Send error message to parent
       if (window.opener) {
         window.opener.postMessage({
           type: 'github-auth-error',
-          error: errorMessage.value
+          error: errorMessage.value,
+          provider: provider
         }, window.location.origin)
       }
       
-      // Auto-close after 3 seconds
-      setTimeout(() => {
-        window.close()
-      }, 3000)
-      
+      setTimeout(() => window.close(), 3000)
       return
     }
     
@@ -91,31 +86,26 @@ onMounted(() => {
       status.value = 'error'
       errorMessage.value = 'Missing authorization code or state'
       
-      // Send error message to parent
       if (window.opener) {
         window.opener.postMessage({
           type: 'github-auth-error',
-          error: errorMessage.value
+          error: errorMessage.value,
+          provider: provider
         }, window.location.origin)
       }
-      
       return
     }
     
-    // Send the code and state to the parent window
     if (window.opener) {
       window.opener.postMessage({
         type: 'github-auth-success',
         code: code,
-        receivedState: state
+        receivedState: state,
+        provider: provider
       }, window.location.origin)
       
       status.value = 'success'
-      
-      // Auto-close after 2 seconds
-      setTimeout(() => {
-        window.close()
-      }, 2000)
+      setTimeout(() => window.close(), 2000)
     } else {
       status.value = 'error'
       errorMessage.value = 'Could not communicate with parent window'
@@ -126,19 +116,14 @@ onMounted(() => {
     status.value = 'error'
     errorMessage.value = err.message || 'An unexpected error occurred'
     
-    // Send error to parent if possible
     if (window.opener) {
       window.opener.postMessage({
         type: 'github-auth-error',
-        error: errorMessage.value
+        error: errorMessage.value,
+        provider: 'ghec'
       }, window.location.origin)
     }
   }
-})
-
-// Prevent navigation away from this page
-onBeforeUnmount(() => {
-  // Cleanup if needed
 })
 </script>
 

@@ -162,14 +162,17 @@ gh-device-flow/
 │
 ├── frontend/
 │   ├── components/         # Vue components
-│   │   ├── GitHubConnection.vue
+│   │   ├── GitHubConnections.vue  # Ghec and Ghes
 │   │   ├── LoginFlow.vue
 │   │   └── UserProfile.vue
 │   ├── composables/        # Composables
 │   │   ├── useAzureAuth.ts
 │   │   └── useMultiAuth.ts
 │   ├── pages/             # Page components
-│   │   ├── auth/callback.vue
+│   │   ├── auth/
+│   │   │   └── callback/
+│   │   │       ├── ghec.vue
+│   │   │       └── ghes.vue
 │   │   └── index.vue
 │   ├── app.vue            # Root component
 │   ├── nuxt.config.ts     # Nuxt configuration

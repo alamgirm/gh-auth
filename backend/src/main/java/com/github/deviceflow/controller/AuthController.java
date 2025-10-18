@@ -55,7 +55,7 @@ public class AuthController {
     }
     
     /**
-     * Get authentication status for both Azure and GitHub
+     * Get authentication status for Azure, Ghec, and Ghes
      */
     @GetMapping("/status")
     public ResponseEntity<AuthStatus> getAuthStatus(
@@ -64,7 +64,9 @@ public class AuthController {
         if (authHeader == null || !authHeader.startsWith("Bearer ")) {
             return ResponseEntity.ok(AuthStatus.builder()
                     .azureAuthenticated(false)
-                    .githubConnected(false)
+                    .ghecConnected(false)
+                    .ghesConnected(false)
+                    .ghesEnabled(githubAuthService.isGhesEnabled())
                     .message("Not authenticated")
                     .build());
         }
@@ -78,35 +80,55 @@ public class AuthController {
             if (azureUser == null) {
                 return ResponseEntity.ok(AuthStatus.builder()
                         .azureAuthenticated(false)
-                        .githubConnected(false)
+                        .ghecConnected(false)
+                        .ghesConnected(false)
+                        .ghesEnabled(githubAuthService.isGhesEnabled())
                         .message("Invalid Azure token")
                         .build());
             }
             
-            // Check if GitHub is linked
             String azureUserId = String.valueOf(azureUser.getId());
-            boolean githubLinked = userLinkingService.hasGitHubLinked(azureUserId);
             
-            GitHubUser githubUser = null;
-            if (githubLinked) {
-                // Get GitHub user info using stored token
-                String githubToken = userLinkingService.getGitHubToken(azureUserId);
-                if (githubToken != null) {
+            // Check Ghec connection
+            boolean ghecLinked = userLinkingService.hasGitHubLinked(azureUserId, "ghec");
+            GitHubUser ghecUser = null;
+            if (ghecLinked) {
+                String ghecToken = userLinkingService.getGitHubToken(azureUserId, "ghec");
+                if (ghecToken != null) {
                     try {
-                        githubUser = githubAuthService.fetchUserInfoWithStoredToken(githubToken);
+                        ghecUser = githubAuthService.fetchUserInfoWithStoredToken("ghec", ghecToken);
                     } catch (Exception e) {
-                        log.warn("GitHub token invalid, unlinking", e);
-                        userLinkingService.unlinkGitHubAccount(azureUserId);
-                        githubLinked = false;
+                        log.warn("Ghec token invalid, unlinking", e);
+                        userLinkingService.unlinkGitHubAccount(azureUserId, "ghec");
+                        ghecLinked = false;
+                    }
+                }
+            }
+            
+            // Check Ghes connection
+            boolean ghesLinked = userLinkingService.hasGitHubLinked(azureUserId, "ghes");
+            GitHubUser ghesUser = null;
+            if (ghesLinked) {
+                String ghesToken = userLinkingService.getGitHubToken(azureUserId, "ghes");
+                if (ghesToken != null) {
+                    try {
+                        ghesUser = githubAuthService.fetchUserInfoWithStoredToken("ghes", ghesToken);
+                    } catch (Exception e) {
+                        log.warn("Ghes token invalid, unlinking", e);
+                        userLinkingService.unlinkGitHubAccount(azureUserId, "ghes");
+                        ghesLinked = false;
                     }
                 }
             }
             
             return ResponseEntity.ok(AuthStatus.builder()
                     .azureAuthenticated(true)
-                    .githubConnected(githubLinked)
+                    .ghecConnected(ghecLinked)
+                    .ghesConnected(ghesLinked)
+                    .ghesEnabled(githubAuthService.isGhesEnabled())
                     .azureUser(azureUser)
-                    .githubUser(githubUser)
+                    .ghecUser(ghecUser)
+                    .ghesUser(ghesUser)
                     .message("Authenticated")
                     .build());
             
@@ -116,14 +138,20 @@ public class AuthController {
         }
     }
     
-    // ========== GitHub Account Linking ==========
+    // ========== GitHub Account Linking (Ghec and Ghes) ==========
     
     /**
      * Get GitHub authorization URL for linking account
+     * @param provider "ghec" or "ghes"
      */
-    @GetMapping("/github/authorize-url")
+    @GetMapping("/github/{provider}/authorize-url")
     public ResponseEntity<Map<String, String>> getGitHubAuthorizeUrl(
+            @PathVariable String provider,
             @RequestHeader(value = "Authorization", required = false) String authHeader) {
+        
+        if (!"ghec".equals(provider) && !"ghes".equals(provider)) {
+            return ResponseEntity.badRequest().body(Map.of("error", "Invalid provider"));
+        }
         
         // Verify user is authenticated with Azure first
         if (authHeader == null || !authHeader.startsWith("Bearer ")) {
@@ -132,26 +160,33 @@ public class AuthController {
         
         try {
             String state = UUID.randomUUID().toString();
-            String authUrl = githubAuthService.getAuthorizationUrl(state);
+            String authUrl = githubAuthService.getAuthorizationUrl(provider, state);
             
             Map<String, String> response = new HashMap<>();
             response.put("url", authUrl);
             response.put("state", state);
+            response.put("provider", provider);
             
             return ResponseEntity.ok(response);
         } catch (Exception e) {
-            log.error("Error generating GitHub authorization URL", e);
+            log.error("Error generating {} authorization URL", provider, e);
             return ResponseEntity.internalServerError().build();
         }
     }
     
     /**
      * Link GitHub account to Azure user
+     * @param provider "ghec" or "ghes"
      */
-    @PostMapping("/github/link")
+    @PostMapping("/github/{provider}/link")
     public ResponseEntity<Map<String, Object>> linkGitHubAccount(
+            @PathVariable String provider,
             @RequestHeader(value = "Authorization", required = false) String authHeader,
             @RequestBody Map<String, String> request) {
+        
+        if (!"ghec".equals(provider) && !"ghes".equals(provider)) {
+            return ResponseEntity.badRequest().body(Map.of("error", "Invalid provider"));
+        }
         
         // Verify Azure authentication
         if (authHeader == null || !authHeader.startsWith("Bearer ")) {
@@ -175,37 +210,44 @@ public class AuthController {
             String azureUserId = String.valueOf(azureUser.getId());
             
             // Exchange GitHub code for token WITHOUT storing
-            Map<String, Object> githubData = githubAuthService.exchangeCodeWithoutStoring(code);
+            Map<String, Object> githubData = githubAuthService.exchangeCodeWithoutStoring(provider, code);
             
             String githubToken = (String) githubData.get("token");
             GitHubUser githubUser = (GitHubUser) githubData.get("user");
             String githubUserId = (String) githubData.get("userId");
             
-            log.info("GitHub user from exchange: {} ({})", githubUser.getLogin(), githubUserId);
+            log.info("{} user from exchange: {} ({})", provider.toUpperCase(), githubUser.getLogin(), githubUserId);
             log.info("Linking to Azure user: {}", azureUserId);
             
-            // Link GitHub to Azure user (stores in DB as "azure:{azureId}:github")
-            userLinkingService.linkGitHubAccount(azureUserId, githubUserId, githubToken, githubUser.getLogin());
+            // Link GitHub to Azure user (stores in DB as "azure:{azureId}:{provider}")
+            userLinkingService.linkGitHubAccount(azureUserId, githubUserId, githubToken, githubUser.getLogin(), provider);
             
-            log.info("GitHub account linked successfully");
+            log.info("{} account linked successfully", provider.toUpperCase());
             
             return ResponseEntity.ok(Map.of(
-                    "message", "GitHub account linked successfully",
+                    "message", provider.toUpperCase() + " account linked successfully",
+                    "provider", provider,
                     "githubUser", githubUser
             ));
             
         } catch (Exception e) {
-            log.error("Error linking GitHub account", e);
+            log.error("Error linking {} account", provider, e);
             return ResponseEntity.status(500).body(Map.of("error", e.getMessage()));
         }
     }
     
     /**
      * Unlink GitHub account from Azure user
+     * @param provider "ghec" or "ghes"
      */
-    @PostMapping("/github/unlink")
+    @PostMapping("/github/{provider}/unlink")
     public ResponseEntity<Map<String, String>> unlinkGitHubAccount(
+            @PathVariable String provider,
             @RequestHeader(value = "Authorization", required = false) String authHeader) {
+        
+        if (!"ghec".equals(provider) && !"ghes".equals(provider)) {
+            return ResponseEntity.badRequest().body(Map.of("error", "Invalid provider"));
+        }
         
         if (authHeader == null || !authHeader.startsWith("Bearer ")) {
             return ResponseEntity.status(401).body(Map.of("error", "Azure authentication required"));
@@ -220,12 +262,12 @@ public class AuthController {
             }
             
             String azureUserId = String.valueOf(azureUser.getId());
-            userLinkingService.unlinkGitHubAccount(azureUserId);
+            userLinkingService.unlinkGitHubAccount(azureUserId, provider);
             
-            return ResponseEntity.ok(Map.of("message", "GitHub account unlinked successfully"));
+            return ResponseEntity.ok(Map.of("message", provider.toUpperCase() + " account unlinked successfully"));
             
         } catch (Exception e) {
-            log.error("Error unlinking GitHub account", e);
+            log.error("Error unlinking {} account", provider, e);
             return ResponseEntity.status(500).body(Map.of("error", e.getMessage()));
         }
     }
@@ -234,7 +276,10 @@ public class AuthController {
      * Health check endpoint
      */
     @GetMapping("/health")
-    public ResponseEntity<String> health() {
-        return ResponseEntity.ok("OK");
+    public ResponseEntity<Map<String, Object>> health() {
+        Map<String, Object> status = new HashMap<>();
+        status.put("status", "OK");
+        status.put("ghesEnabled", githubAuthService.isGhesEnabled());
+        return ResponseEntity.ok(status);
     }
 }

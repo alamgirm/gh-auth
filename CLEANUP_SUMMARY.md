@@ -57,14 +57,16 @@ backend/
 ```
 frontend/
 ├── components/
-│   ├── GitHubConnection.vue
+│   ├── GitHubConnections.vue # Ghec and Ghes connections
 │   ├── LoginFlow.vue
 │   └── UserProfile.vue
 ├── composables/
 │   ├── useAzureAuth.ts      # Azure MSAL integration
 │   └── useMultiAuth.ts      # Unified multi-auth
 ├── pages/
-│   ├── auth/callback.vue
+│   ├── auth/callback/
+│   │   ├── ghec.vue         # Ghec OAuth callback
+│   │   └── ghes.vue         # Ghes OAuth callback
 │   └── index.vue
 ├── app.vue
 ├── nuxt.config.ts
