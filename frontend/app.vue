@@ -5,12 +5,12 @@
 </template>
 
 <script setup lang="ts">
-const { checkAuthStatus, handleAzureRedirect } = useMultiAuth()
+const { handleAzureRedirect } = useMultiAuth()
 
-// Handle Azure redirect and load auth state on mount
+// Handle Azure redirect on mount
 onMounted(async () => {
   try {
-    // Always check for Azure redirect on mount
+    // Check for Azure redirect response
     // MSAL will handle it if there's a redirect response
     const azureResult = await handleAzureRedirect()
     
@@ -18,14 +18,10 @@ onMounted(async () => {
       console.log('Azure redirect handled successfully, user logged in')
       // Clean URL to remove query parameters
       window.history.replaceState({}, document.title, window.location.pathname)
-    } else {
-      // No redirect, check if user has existing Azure session
-      await checkAuthStatus()
     }
+    // Note: Auth status check happens in index.vue to avoid duplicate calls
   } catch (error) {
     console.error('Error handling Azure redirect:', error)
-    // Still try to load auth state even if redirect handling fails
-    await checkAuthStatus()
   }
 })
 </script>

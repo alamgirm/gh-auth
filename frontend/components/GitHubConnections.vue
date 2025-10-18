@@ -77,7 +77,7 @@
     </div>
     
     <!-- Ghes Connection -->
-    <div v-if="ghesEnabled" class="github-connection p-6 border rounded-lg" :class="isGhesConnected ? 'bg-blue-50 border-blue-400' : 'bg-blue-50 border-blue-300'">
+    <div class="github-connection p-6 border rounded-lg" :class="isGhesConnected ? 'bg-blue-50 border-blue-400' : 'bg-blue-50 border-blue-300'">
       <div class="flex items-center justify-between mb-4">
         <div class="flex items-center">
           <svg class="w-8 h-8 mr-3 text-blue-800" fill="currentColor" viewBox="0 0 24 24">
@@ -157,13 +157,6 @@
       </p>
     </div>
     
-    <!-- Info if Ghes not enabled -->
-    <div v-else class="p-4 bg-gray-100 border border-gray-300 rounded-lg">
-      <p class="text-sm text-gray-600 text-center">
-        <span class="font-semibold">GitHub Enterprise Server</span> is not configured.
-        Contact your administrator to enable Ghes integration.
-      </p>
-    </div>
   </div>
 </template>
 
@@ -173,7 +166,6 @@ const props = defineProps<{
   isGhesConnected: boolean
   ghecUser: any
   ghesUser: any
-  ghesEnabled: boolean
   isConnectingGhec?: boolean
   isConnectingGhes?: boolean
   isDisconnectingGhec?: boolean

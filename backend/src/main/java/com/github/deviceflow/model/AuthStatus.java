@@ -14,7 +14,6 @@ public class AuthStatus {
     private boolean azureAuthenticated;
     private boolean ghecConnected;
     private boolean ghesConnected;
-    private boolean ghesEnabled;
     
     private GitHubUser azureUser;
     private GitHubUser ghecUser;

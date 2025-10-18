@@ -34,7 +34,6 @@
             :is-ghes-connected="isGhesConnected"
             :ghec-user="ghecUser"
             :ghes-user="ghesUser"
-            :ghes-enabled="ghesEnabled"
             :is-connecting-ghec="isConnectingGhec"
             :is-connecting-ghes="isConnectingGhes"
             :is-disconnecting-ghec="isDisconnectingGhec"
@@ -60,7 +59,7 @@
           <ul class="list-disc list-inside space-y-1 text-xs">
             <li><strong>Azure:</strong> Token managed by MSAL in browser, sent with each request</li>
             <li><strong>Ghec:</strong> Token stored securely on backend (only if connected)</li>
-            <li v-if="ghesEnabled"><strong>Ghes:</strong> Token stored securely on backend (only if connected)</li>
+            <li><strong>Ghes:</strong> Token stored securely on backend (only if connected)</li>
             <li><strong>API Calls:</strong> Backend validates Azure token and proxies GitHub requests</li>
           </ul>
         </div>
@@ -75,7 +74,7 @@
           <ul class="list-disc list-inside space-y-1 text-xs">
             <li><strong>Primary:</strong> Microsoft Azure Entra ID (required)</li>
             <li><strong>Optional:</strong> Ghec (github.com) integration</li>
-            <li v-if="ghesEnabled"><strong>Optional:</strong> Ghes (Enterprise Server) integration</li>
+            <li><strong>Optional:</strong> Ghes (Enterprise Server) integration</li>
             <li><strong>Security:</strong> Tokens handled appropriately by each provider</li>
           </ul>
         </div>
@@ -92,7 +91,6 @@ const {
   isAzureAuthenticated, 
   isGhecConnected,
   isGhesConnected,
-  ghesEnabled,
   connectGitHub,
   disconnectGitHub,
   logout,
@@ -104,6 +102,21 @@ const isConnectingGhes = ref(false)
 const isDisconnectingGhec = ref(false)
 const isDisconnectingGhes = ref(false)
 
+// Always refresh auth status on mount to get latest connection status
+onMounted(async () => {
+  console.log('Checking auth status on mount...')
+  await checkAuthStatus()
+  
+  // Check if just returned from GitHub connection
+  if (process.client) {
+    const justConnected = sessionStorage.getItem('github_just_connected')
+    if (justConnected) {
+      console.log(`Just connected ${justConnected}, status refreshed`)
+      sessionStorage.removeItem('github_just_connected')
+    }
+  }
+})
+
 const handleConnect = async (provider: 'ghec' | 'ghes') => {
   if (provider === 'ghec') {
     if (isConnectingGhec.value) return
@@ -114,23 +127,13 @@ const handleConnect = async (provider: 'ghec' | 'ghes') => {
   }
   
   try {
+    // This will trigger a full-page redirect
     await connectGitHub(provider)
-    console.log(`${provider.toUpperCase()} connected successfully`)
+    // Note: Code after this won't execute because of redirect
   } catch (error: any) {
     console.error(`Failed to connect ${provider}:`, error)
+    alert(error.message || `Failed to connect ${provider.toUpperCase()} account`)
     
-    // Check if actually connected despite error
-    await new Promise(resolve => setTimeout(resolve, 500))
-    await checkAuthStatus()
-    
-    const isConnected = provider === 'ghec' ? isGhecConnected.value : isGhesConnected.value
-    
-    if (!isConnected) {
-      alert(error.message || `Failed to connect ${provider.toUpperCase()} account`)
-    } else {
-      console.log(`${provider.toUpperCase()} connected successfully (despite error)`)
-    }
-  } finally {
     if (provider === 'ghec') {
       isConnectingGhec.value = false
     } else {

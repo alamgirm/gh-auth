@@ -84,7 +84,6 @@ private GitHubUser githubUser;
 // After
 private boolean ghecConnected;
 private boolean ghesConnected;
-private boolean ghesEnabled;
 private GitHubUser ghecUser;
 private GitHubUser ghesUser;
 ```
@@ -127,7 +126,6 @@ const ghecUser = useState<any>('ghecUser', () => null)
 const ghesUser = useState<any>('ghesUser', () => null)
 const isGhecConnected = useState<boolean>('isGhecConnected', () => false)
 const isGhesConnected = useState<boolean>('isGhesConnected', () => false)
-const ghesEnabled = useState<boolean>('ghesEnabled', () => false)
 const connectGitHub = (provider: 'ghec' | 'ghes') => { ... }
 const disconnectGitHub = (provider: 'ghec' | 'ghes') => { ... }
 ```
@@ -191,7 +189,6 @@ A single Azure user can have both Ghec and Ghes accounts linked simultaneously.
   "azureAuthenticated": true,
   "ghecConnected": true,
   "ghesConnected": false,
-  "ghesEnabled": true,
   "azureUser": {...},
   "ghecUser": {...},
   "ghesUser": null

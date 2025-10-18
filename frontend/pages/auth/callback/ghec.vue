@@ -8,11 +8,11 @@
         </svg>
         
         <h2 class="text-2xl font-bold text-gray-800 mb-2">
-          Completing Ghec Authentication
+          Connecting Ghec Account
         </h2>
         
         <p class="text-gray-600">
-          Please wait while we finish logging you in...
+          {{ statusMessage }}
         </p>
       </div>
       
@@ -22,11 +22,11 @@
         </svg>
         
         <h2 class="text-2xl font-bold text-gray-800 mb-2">
-          Success!
+          Ghec Connected!
         </h2>
         
-        <p class="text-gray-600">
-          You can close this window now.
+        <p class="text-gray-600 mb-4">
+          Redirecting you back...
         </p>
       </div>
       
@@ -36,94 +36,127 @@
         </svg>
         
         <h2 class="text-2xl font-bold text-gray-800 mb-2">
-          Authentication Failed
+          Connection Failed
         </h2>
         
         <p class="text-gray-600 mb-4">
           {{ errorMessage }}
         </p>
         
-        <p class="text-sm text-gray-500">
-          You can close this window and try again.
-        </p>
+        <button
+          @click="goBack"
+          class="bg-gray-800 hover:bg-gray-900 text-white font-semibold py-2 px-6 rounded-lg transition duration-200"
+        >
+          Go Back
+        </button>
       </div>
     </div>
   </div>
 </template>
 
 <script setup lang="ts">
+const config = useRuntimeConfig()
+const apiBaseUrl = config.public.apiBaseUrl
+
 const status = ref<'processing' | 'success' | 'error'>('processing')
+const statusMessage = ref('Verifying authorization...')
 const errorMessage = ref('')
 
-onMounted(() => {
+const goBack = () => {
+  navigateTo('/')
+}
+
+onMounted(async () => {
   try {
     const provider = 'ghec'
+    
+    // Get OAuth callback parameters
     const urlParams = new URLSearchParams(window.location.search)
     const code = urlParams.get('code')
     const state = urlParams.get('state')
     const error = urlParams.get('error')
     const errorDescription = urlParams.get('error_description')
     
-    console.log('Ghec callback received:', { code, state, error })
+    console.log('Ghec callback received:', { code: !!code, state: !!state, error })
     
+    // Check for OAuth errors
     if (error) {
       status.value = 'error'
-      errorMessage.value = errorDescription || error || 'Authentication failed'
-      
-      if (window.opener) {
-        window.opener.postMessage({
-          type: 'github-auth-error',
-          error: errorMessage.value,
-          provider: provider
-        }, window.location.origin)
-      }
-      
-      setTimeout(() => window.close(), 3000)
+      errorMessage.value = errorDescription || error || 'Authorization failed'
       return
     }
     
     if (!code || !state) {
       status.value = 'error'
       errorMessage.value = 'Missing authorization code or state'
-      
-      if (window.opener) {
-        window.opener.postMessage({
-          type: 'github-auth-error',
-          error: errorMessage.value,
-          provider: provider
-        }, window.location.origin)
-      }
       return
     }
     
-    if (window.opener) {
-      window.opener.postMessage({
-        type: 'github-auth-success',
-        code: code,
-        receivedState: state,
-        provider: provider
-      }, window.location.origin)
-      
-      status.value = 'success'
-      setTimeout(() => window.close(), 2000)
-    } else {
+    // Verify state matches
+    const savedState = sessionStorage.getItem('github_oauth_state')
+    const savedProvider = sessionStorage.getItem('github_oauth_provider')
+    
+    if (state !== savedState) {
       status.value = 'error'
-      errorMessage.value = 'Could not communicate with parent window'
+      errorMessage.value = 'State mismatch - possible CSRF attack'
+      return
     }
+    
+    if (savedProvider !== provider) {
+      status.value = 'error'
+      errorMessage.value = 'Provider mismatch'
+      return
+    }
+    
+    // Get Azure token
+    statusMessage.value = 'Getting authentication token...'
+    const { getAzureToken } = useMultiAuth()
+    const azureToken = await getAzureToken()
+    
+    if (!azureToken) {
+      status.value = 'error'
+      errorMessage.value = 'Azure authentication expired. Please login again.'
+      setTimeout(() => {
+        navigateTo('/')
+      }, 3000)
+      return
+    }
+    
+    // Link GitHub account
+    statusMessage.value = 'Linking Ghec account...'
+    const response: any = await $fetch(`${apiBaseUrl}/api/auth/github/${provider}/link`, {
+      method: 'POST',
+      headers: {
+        Authorization: `Bearer ${azureToken}`
+      },
+      body: { code }
+    })
+    
+    console.log('Ghec linked successfully:', response.githubUser.login)
+    
+    // Clear OAuth session storage
+    sessionStorage.removeItem('github_oauth_state')
+    sessionStorage.removeItem('github_oauth_provider')
+    
+    // Set success flag for main page
+    sessionStorage.setItem('github_just_connected', 'ghec')
+    
+    // Success!
+    status.value = 'success'
+    
+    // Redirect back to main page
+    setTimeout(() => {
+      navigateTo('/')
+    }, 1500)
     
   } catch (err: any) {
-    console.error('Error in callback:', err)
+    console.error('Error in Ghec callback:', err)
     status.value = 'error'
-    errorMessage.value = err.message || 'An unexpected error occurred'
+    errorMessage.value = err.data?.error || err.message || 'Failed to connect Ghec account'
     
-    if (window.opener) {
-      window.opener.postMessage({
-        type: 'github-auth-error',
-        error: errorMessage.value,
-        provider: 'ghec'
-      }, window.location.origin)
-    }
+    // Clear session storage on error
+    sessionStorage.removeItem('github_oauth_state')
+    sessionStorage.removeItem('github_oauth_provider')
   }
 })
 </script>
-

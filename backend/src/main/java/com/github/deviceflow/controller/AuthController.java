@@ -66,7 +66,6 @@ public class AuthController {
                     .azureAuthenticated(false)
                     .ghecConnected(false)
                     .ghesConnected(false)
-                    .ghesEnabled(githubAuthService.isGhesEnabled())
                     .message("Not authenticated")
                     .build());
         }
@@ -82,7 +81,6 @@ public class AuthController {
                         .azureAuthenticated(false)
                         .ghecConnected(false)
                         .ghesConnected(false)
-                        .ghesEnabled(githubAuthService.isGhesEnabled())
                         .message("Invalid Azure token")
                         .build());
             }
@@ -125,7 +123,6 @@ public class AuthController {
                     .azureAuthenticated(true)
                     .ghecConnected(ghecLinked)
                     .ghesConnected(ghesLinked)
-                    .ghesEnabled(githubAuthService.isGhesEnabled())
                     .azureUser(azureUser)
                     .ghecUser(ghecUser)
                     .ghesUser(ghesUser)
@@ -279,7 +276,6 @@ public class AuthController {
     public ResponseEntity<Map<String, Object>> health() {
         Map<String, Object> status = new HashMap<>();
         status.put("status", "OK");
-        status.put("ghesEnabled", githubAuthService.isGhesEnabled());
         return ResponseEntity.ok(status);
     }
 }

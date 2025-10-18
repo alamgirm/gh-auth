@@ -195,13 +195,4 @@ public class GitHubAuthService {
         }
     }
     
-    /**
-     * Check if Ghes is configured
-     */
-    public boolean isGhesEnabled() {
-        return ghesConfig.getClientId() != null && 
-               !ghesConfig.getClientId().isEmpty() &&
-               ghesConfig.getBaseUrl() != null &&
-               !ghesConfig.getBaseUrl().isEmpty();
-    }
 }
