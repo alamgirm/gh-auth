@@ -1,115 +1,48 @@
-# GitHub OAuth Popup Authentication
+# Multi-Auth Application
 
-A complete full-stack application demonstrating **GitHub App OAuth with popup-based authentication** using **Nuxt 3** frontend and **Spring Boot** backend.
+A full-stack application demonstrating **dual authentication** with Azure Entra ID (primary) and GitHub (optional secondary) using Nuxt 3 and Spring Boot.
 
-## 🎯 Overview
+## 🎯 Architecture Overview
 
-This project implements secure GitHub authentication using **popup-based OAuth flow**, providing:
-- ⚡ **Instant login** - No waiting or manual code entry
-- 🚫 **No page redirects** - Popup handles OAuth, main page stays intact
-- 🔒 **Secure** - Client secret protected on backend
-- 🎨 **Modern UI** - Beautiful Tailwind CSS interface
-- 📱 **Mobile friendly** - Works on all devices
+- **Azure Entra ID**: Primary authentication (required)
+  - Token managed by MSAL in browser
+  - Sent with every backend request in Authorization header
+  - Backend validates JWT on each request (stateless)
 
-## 🏗️ Architecture
+- **GitHub**: Optional secondary authentication
+  - Only needed for GitHub-specific features
+  - Token stored securely on backend
+  - Linked to Azure user account
 
-```
-┌──────────────────┐
-│  Nuxt 3 Frontend │  ──┐
-│  (Port 3000)     │    │ Popup OAuth
-└────────┬─────────┘    │ Communication
-         │              │
-         │ REST API     │
-         │              │
-┌────────▼───────────┐  │    ┌─────────────────┐
-│ Spring Boot Backend├──┴───→│  GitHub OAuth   │
-│  (Port 8080)       │←──────│  API            │
-└────────────────────┘       └─────────────────┘
-```
+## 🚀 Quick Start
 
-### Authentication Flow
+### Prerequisites
+- Node.js 18+
+- Java 17+
+- Azure Entra ID tenant and app registrations
+- GitHub OAuth App (optional, for GitHub features)
 
-```
-1. User clicks "Login with GitHub"
-   │
-2. Frontend → Backend: GET /api/auth/authorize-url
-   │
-3. Backend generates OAuth URL with random state
-   │
-4. Frontend opens popup → GitHub authorization
-   │
-5. User authorizes in popup
-   │
-6. GitHub redirects popup → /auth/callback?code=xxx
-   │
-7. Popup sends code to main window via postMessage
-   │
-8. Main window → Backend: POST /api/auth/exchange-code
-   │
-9. Backend exchanges code for token with GitHub
-   │
-10. Backend fetches user info
-    │
-11. Frontend stores token and displays profile
-    │
-✅ User is logged in! (< 3 seconds)
-```
-
-## 🚀 Features
-
-- ✅ **Popup-Based Auth**: No full-page redirects
-- ✅ **Lightning Fast**: Login in under 3 seconds
-- ✅ **Secure**: Client secret never exposed to frontend
-- ✅ **Stateless Backend**: No session storage required
-- ✅ **CSRF Protection**: State parameter validation
-- ✅ **Modern UI**: Beautiful Tailwind CSS interface
-- ✅ **User Profile**: Display GitHub user information
-- ✅ **Token Persistence**: LocalStorage for token management
-- ✅ **Error Handling**: Comprehensive error states
-- ✅ **Mobile Friendly**: Works on all screen sizes
-
-## 📋 Prerequisites
-
-- **Java 17+** (for backend)
-- **Node.js 18+** (for frontend)
-- **GitHub OAuth App** credentials
-
-## 🔑 Setup GitHub OAuth App
-
-1. Go to [GitHub Developer Settings](https://github.com/settings/developers)
-2. Click **"New OAuth App"**
-3. Fill in the details:
-   ```
-   Application name: Your App Name
-   Homepage URL: http://localhost:3000
-   Application description: (optional)
-   Authorization callback URL: http://localhost:3000/auth/callback
-   ```
-   ⚠️ **Important**: Callback URL must be exact!
-
-4. Click **"Register application"**
-5. Copy your **Client ID**
-6. Click **"Generate a new client secret"**
-7. Copy your **Client Secret** (won't be shown again!)
-
-## 🛠️ Installation & Setup
-
-### Backend Setup
+### 1. Backend Setup
 
 ```bash
 cd backend
 
-# Set environment variables
-export GITHUB_CLIENT_ID=your_client_id_here
-export GITHUB_CLIENT_SECRET=your_client_secret_here
+# Configure environment variables
+cp env.example .env
+# Edit .env with your values:
+# - BE_CLIENT_ID (Azure backend API client ID)
+# - BE_TENANT_ID (Azure tenant ID)
+# - GITHUB_CLIENT_ID (GitHub OAuth app ID)
+# - GITHUB_CLIENT_SECRET (GitHub OAuth secret)
 
-# Run the backend
-./gradlew bootRun
+# Run backend
+./run.sh
+# Or: ./gradlew bootRun
 ```
 
-The backend will start on `http://localhost:8080`
+Backend runs on: `http://localhost:8080`
 
-### Frontend Setup
+### 2. Frontend Setup
 
 ```bash
 cd frontend
@@ -117,285 +50,315 @@ cd frontend
 # Install dependencies
 npm install
 
-# Run the development server
+# Configure environment variables
+cp env.example .env
+# Edit .env with your values:
+# - NUXT_PUBLIC_AZURE_CLIENT_ID (Azure frontend SPA client ID)
+# - NUXT_PUBLIC_AZURE_AUTHORITY (Azure authority URL)
+# - NUXT_PUBLIC_AZURE_API_SCOPE (Backend API scope)
+
+# Run frontend
 npm run dev
 ```
 
-The frontend will start on `http://localhost:3000`
+Frontend runs on: `http://localhost:3000`
 
-## 🎮 Usage
+### 3. Open Browser
 
-1. **Start Both Servers**
-   - Backend on port 8080
-   - Frontend on port 3000
+```bash
+open http://localhost:3000
+```
 
-2. **Open Browser**
-   - Navigate to `http://localhost:3000`
+## 📚 Documentation
 
-3. **Login**
-   - Click **"Login with GitHub"**
-   - Popup opens with GitHub authorization
-   - Authorize the application
-   - Popup closes automatically
-   - ✅ **You're logged in!**
+- **[NEW_ARCHITECTURE.md](NEW_ARCHITECTURE.md)** - Complete architecture guide, API documentation, and testing
+- **[AZURE_BACKEND_API_SETUP.md](AZURE_BACKEND_API_SETUP.md)** - Step-by-step Azure app registration setup
+- **[AZURE_SCOPE_CREATION_GUIDE.md](AZURE_SCOPE_CREATION_GUIDE.md)** - Visual guide for creating API scopes
+
+## 🔑 Azure Configuration
+
+You need **TWO** Azure App Registrations:
+
+### Backend API App
+- Platform: Web API
+- Exposes API: `api://{backend-client-id}/access_as_user`
+- Used for: JWT token validation
+
+### Frontend SPA App
+- Platform: Single Page Application
+- Redirect URI: `http://localhost:3000`
+- API Permissions: Access to backend API
+- Used for: User authentication via MSAL
+
+See [AZURE_BACKEND_API_SETUP.md](AZURE_BACKEND_API_SETUP.md) for detailed setup.
+
+## 🔐 Security Features
+
+✅ **Azure Token**
+- Managed by MSAL in browser localStorage
+- Automatic token refresh
+- Validated on every backend request
+- Stateless authentication
+
+✅ **GitHub Token** (Optional)
+- Stored securely on backend database
+- Only accessible by owning Azure user
+- Linked with composite key: `azure:{azureId}:github`
+- Used for GitHub API calls on user's behalf
+
+✅ **No Session Storage**
+- Stateless backend (easy to scale)
+- Token-based validation
+- No session affinity needed
+
+## 🎨 User Experience
+
+### First Time User
+1. Click "Sign in with Microsoft"
+2. Redirected to Microsoft login
+3. Sign in with Azure credentials
+4. Redirected back to app
+5. Logged in with Azure
+6. (Optional) Click "Connect GitHub" for GitHub features
+
+### Returning User
+1. Visit app
+2. MSAL acquires token silently
+3. Instantly logged in (< 1 second)
+4. Both Azure and GitHub status shown
+
+## 🏗️ Tech Stack
+
+### Frontend
+- **Nuxt 3** - Vue 3 framework with SSR
+- **TypeScript** - Type-safe development
+- **Tailwind CSS** - Utility-first styling
+- **MSAL Browser** - Microsoft authentication library
+- **$fetch** - HTTP client for API calls
+
+### Backend
+- **Spring Boot 3.2** - Java web framework
+- **Spring WebFlux** - Reactive web support
+- **Spring Data JPA** - Database access
+- **H2 Database** - In-memory database (dev)
+- **Nimbus JOSE+JWT** - JWT validation
+- **Lombok** - Reduce boilerplate
 
 ## 📁 Project Structure
 
 ```
 gh-device-flow/
-├── backend/                    # Spring Boot Backend
-│   ├── src/main/
-│   │   ├── java/com/github/deviceflow/
-│   │   │   ├── controller/     # REST Controllers
-│   │   │   │   └── AuthController.java
-│   │   │   ├── service/        # Business Logic
-│   │   │   │   └── GitHubAuthService.java
-│   │   │   ├── model/          # Data Models
-│   │   │   │   ├── AccessTokenResponse.java
-│   │   │   │   └── GitHubUser.java
-│   │   │   └── config/         # Configuration
-│   │   │       ├── GitHubOAuthConfig.java
-│   │   │       └── WebConfig.java
-│   │   └── resources/
-│   │       └── application.yml
-│   └── build.gradle
+├── backend/
+│   ├── src/main/java/com/github/deviceflow/
+│   │   ├── config/         # Configuration classes
+│   │   ├── controller/     # REST controllers
+│   │   ├── entity/         # JPA entities
+│   │   ├── model/          # Data models
+│   │   ├── repository/     # Data repositories
+│   │   └── service/        # Business logic
+│   ├── build.gradle        # Dependencies
+│   ├── env.example         # Backend env template
+│   └── run.sh             # Run script
 │
-├── frontend/                   # Nuxt 3 Frontend
-│   ├── pages/
-│   │   ├── index.vue          # Main page
-│   │   └── auth/
-│   │       └── callback.vue   # OAuth callback (popup)
-│   ├── components/
-│   │   ├── LoginFlow.vue      # Login button & flow
-│   │   └── UserProfile.vue    # User profile display
-│   ├── composables/
-│   │   └── useAuth.ts         # Auth logic & popup handling
-│   ├── nuxt.config.ts
-│   └── package.json
+├── frontend/
+│   ├── components/         # Vue components
+│   │   ├── GitHubConnection.vue
+│   │   ├── LoginFlow.vue
+│   │   └── UserProfile.vue
+│   ├── composables/        # Composables
+│   │   ├── useAzureAuth.ts
+│   │   └── useMultiAuth.ts
+│   ├── pages/             # Page components
+│   │   ├── auth/callback.vue
+│   │   └── index.vue
+│   ├── app.vue            # Root component
+│   ├── nuxt.config.ts     # Nuxt configuration
+│   └── env.example        # Frontend env template
 │
-└── README.md                   # This file
-```
-
-## 🔌 API Endpoints
-
-### Backend REST API
-
-| Method | Endpoint | Description |
-|--------|----------|-------------|
-| GET | `/api/auth/authorize-url` | Get GitHub OAuth URL |
-| POST | `/api/auth/exchange-code` | Exchange code for token |
-| GET | `/api/auth/verify` | Verify access token |
-| GET | `/api/auth/health` | Health check |
-
-### Frontend Routes
-
-| Route | Purpose |
-|-------|---------|
-| `/` | Main application page |
-| `/auth/callback` | OAuth callback handler (popup) |
-
-## 🔐 Security Features
-
-1. **Client Secret Protection** - Secret never exposed to frontend
-2. **CSRF Protection** - Random state parameter
-3. **Origin Validation** - postMessage origin check
-4. **Popup Communication** - Secure window.postMessage API
-5. **HTTPS Ready** - Secure in production
-6. **Stateless Backend** - No session vulnerabilities
-
-## 📝 Configuration
-
-### Backend Configuration
-
-Edit `backend/src/main/resources/application.yml`:
-
-```yaml
-github:
-  app:
-    client-id: ${GITHUB_CLIENT_ID}
-    client-secret: ${GITHUB_CLIENT_SECRET}
-    authorize-url: https://github.com/login/oauth/authorize
-    token-url: https://github.com/login/oauth/access_token
-    user-api-url: https://api.github.com/user
-    redirect-uri: http://localhost:3000/auth/callback
-
-cors:
-  allowed-origins: http://localhost:3000
-```
-
-### Frontend Configuration
-
-Edit `frontend/nuxt.config.ts`:
-
-```typescript
-runtimeConfig: {
-  public: {
-    apiBaseUrl: 'http://localhost:8080'
-  }
-}
+└── Documentation/
+    ├── README.md (this file)
+    ├── NEW_ARCHITECTURE.md
+    ├── AZURE_BACKEND_API_SETUP.md
+    └── AZURE_SCOPE_CREATION_GUIDE.md
 ```
 
 ## 🧪 Testing
 
-### Test Locally
-
+### Test Azure Authentication
 ```bash
-# 1. Start backend
-cd backend && ./gradlew bootRun
-
-# 2. Start frontend (new terminal)
-cd frontend && npm run dev
-
-# 3. Open browser
-open http://localhost:3000
-
-# 4. Click "Login with GitHub"
-# 5. Authorize in popup
-# 6. Verify you're logged in
+1. Open http://localhost:3000
+2. Click "Sign in with Microsoft"
+3. Sign in with Azure credentials
+4. Should see Azure user profile
+5. Status: "Primary Authentication: ✓ Authenticated"
 ```
 
-### Test Endpoints
-
+### Test GitHub Connection
 ```bash
-# Health check
-curl http://localhost:8080/api/auth/health
-
-# Get authorization URL
-curl http://localhost:8080/api/auth/authorize-url
-
-# Verify token (after login)
-curl -H "Authorization: Bearer YOUR_TOKEN" \
-     http://localhost:8080/api/auth/verify
+1. While authenticated with Azure
+2. Click "Connect GitHub"
+3. Authorize in popup
+4. Popup closes automatically
+5. Status: "GitHub Integration: ✓ Connected"
+6. See GitHub username and avatar
 ```
 
-## 🚢 Production Deployment
-
-### 1. Update GitHub OAuth App
-
-In GitHub OAuth App settings, update:
-- **Homepage URL**: `https://yourdomain.com`
-- **Authorization callback URL**: `https://yourdomain.com/auth/callback`
-
-### 2. Backend Configuration
-
-```yaml
-github:
-  app:
-    redirect-uri: https://yourdomain.com/auth/callback
-
-cors:
-  allowed-origins: https://yourdomain.com
-```
-
-### 3. Frontend Configuration
-
-```typescript
-runtimeConfig: {
-  public: {
-    apiBaseUrl: 'https://api.yourdomain.com'
-  }
-}
-```
-
-### 4. Environment Variables
-
-Set in your hosting platform:
+### Test Disconnect
 ```bash
-GITHUB_CLIENT_ID=your_client_id
-GITHUB_CLIENT_SECRET=your_client_secret
-GITHUB_REDIRECT_URI=https://yourdomain.com/auth/callback
+1. Click "Disconnect GitHub"
+2. Confirm
+3. Status changes to "Not Connected"
+4. GitHub data removed from database
+```
+
+### Test Logout
+```bash
+1. Click "Sign Out"
+2. Azure logout (MSAL clears tokens)
+3. Redirected to login page
+4. Both Azure and GitHub cleared
 ```
 
 ## 🐛 Troubleshooting
 
-### Popup is blocked
+### Backend Issues
 
-**Solution**: Allow popups in browser settings for your site
+**"GitHub client ID is empty"**
+```bash
+# Make sure you source .env before running
+cd backend
+source .env
+./gradlew bootRun
 
-### "Failed to communicate with parent window"
-
-**Solution**: Check callback URL matches exactly:
-- GitHub OAuth App setting
-- Backend `redirect-uri` config
-- Must be same origin as main app
-
-### CORS errors
-
-**Solution**: Update `application.yml`:
-```yaml
-cors:
-  allowed-origins: http://localhost:3000
+# Or use the run script
+./run.sh
 ```
 
-### State mismatch error
+**"Transaction required" errors**
+```bash
+# Fixed: @Transactional annotations added
+# Restart backend if you see this
+```
 
-**Solution**: This is a security feature. Ensure:
-- Not using browser "back" button
-- Completing auth in one session
-- Cookies are enabled
+### Frontend Issues
 
-## 📚 Documentation
+**"MSAL not initialized"**
+```bash
+# Check environment variables
+cat frontend/.env
 
-- **[ARCHITECTURE.md](ARCHITECTURE.md)** - Technical architecture details
-- **[GITHUB_APP_SETUP.md](GITHUB_APP_SETUP.md)** - Setup guide
-- **[QUICKSTART.md](QUICKSTART.md)** - 5-minute quick start
+# Should have:
+# NUXT_PUBLIC_AZURE_CLIENT_ID=...
+# NUXT_PUBLIC_AZURE_AUTHORITY=...
+# NUXT_PUBLIC_AZURE_API_SCOPE=...
+```
 
-## 🎯 How It Works
+**"401 Unauthorized" on backend calls**
+```bash
+# Check backend .env has correct values:
+# BE_CLIENT_ID should match backend app registration
+# BE_TENANT_ID should match your Azure tenant
 
-### Popup Communication
+# Check frontend API scope matches backend:
+# NUXT_PUBLIC_AZURE_API_SCOPE=api://{BE_CLIENT_ID}/access_as_user
+```
 
-The app uses `window.postMessage` for secure communication between the main window and popup:
+## 📊 API Endpoints
 
-1. Main window opens popup with GitHub OAuth URL
-2. User authorizes in popup
-3. GitHub redirects popup to `/auth/callback`
-4. Callback page extracts code and state
-5. Sends message to parent window
-6. Parent validates state and exchanges code
-7. Popup closes automatically
+### Azure User (Require Azure Token in Authorization Header)
 
-### Why No Full-Page Redirect?
+| Method | Endpoint | Description |
+|--------|----------|-------------|
+| GET | `/api/auth/user` | Get current Azure user |
+| GET | `/api/auth/status` | Get both auth statuses |
 
-- ✅ Better UX - Main page state preserved
-- ✅ Single-page app friendly
-- ✅ No route guards needed
-- ✅ Faster perceived performance
+### GitHub Linking (Require Azure Token)
 
-## 💡 Key Benefits
+| Method | Endpoint | Description |
+|--------|----------|-------------|
+| GET | `/api/auth/github/authorize-url` | Get GitHub OAuth URL |
+| POST | `/api/auth/github/link` | Link GitHub account |
+| POST | `/api/auth/github/unlink` | Unlink GitHub account |
 
-| Feature | Traditional OAuth | This Implementation |
-|---------|------------------|---------------------|
-| **Page Redirect** | Full page | None (popup only) |
-| **User Steps** | 3-4 clicks | 2 clicks |
-| **State Loss** | Possible | Never |
-| **Speed** | 5-10 seconds | <3 seconds |
-| **UX** | Good | Excellent |
-| **Mobile Support** | Good | Excellent |
+## 🎯 Use Cases
 
-## 📈 Performance
+### Enterprise User (Azure Only)
+```
+User: employee@company.com
+Authentication: Azure Entra ID
+GitHub: Not connected
+Result: Full app access
+```
 
-- **Initial load**: ~500ms
-- **Authorization URL**: <100ms
-- **Token exchange**: ~500ms
-- **User info fetch**: ~300ms
-- **Total login time**: **<3 seconds** ⚡
+### Developer (Azure + GitHub)
+```
+User: dev@company.com
+Authentication: Azure Entra ID
+GitHub: Connected
+Result: Full app access + GitHub features
+```
 
-## 🤝 Contributing
+## 🔄 Token Flow
 
-This is a complete starter template. Feel free to:
-- Use it as-is
-- Modify for your needs
-- Learn from the implementation
-- Build upon it
+```
+Frontend Request:
+GET /api/auth/status
+Authorization: Bearer eyJ0eXAiOiJKV1QiLCJhb... (Azure JWT)
 
-## 📄 License
+Backend:
+1. Extract token from Authorization header
+2. Validate JWT signature using Azure JWKS
+3. Verify issuer and audience
+4. Extract user info from claims
+5. Return user data
 
-MIT License - feel free to use this project for learning and development!
+If GitHub connected:
+6. Look up GitHub token in DB: azure:{azureId}:github
+7. Make GitHub API call with stored token
+8. Return combined data
+```
 
-## 👤 Author
+## 🚀 Production Considerations
 
-Built as a demonstration of modern GitHub OAuth implementation.
+### Backend
+- [ ] Switch from H2 to PostgreSQL/MySQL
+- [ ] Enable HTTPS
+- [ ] Configure CORS for production domain
+- [ ] Add rate limiting
+- [ ] Enable logging to file/service
+- [ ] Add health check endpoints
+- [ ] Consider token refresh strategy for GitHub
+
+### Frontend
+- [ ] Update redirect URIs in Azure app registration
+- [ ] Update CORS settings in backend
+- [ ] Enable production build optimizations
+- [ ] Add error tracking (e.g., Sentry)
+- [ ] Add analytics
+- [ ] Consider CDN for static assets
+
+### Security
+- [ ] Review MSAL cache options (localStorage vs memory)
+- [ ] Implement token refresh for GitHub
+- [ ] Add request signing/encryption if needed
+- [ ] Regular security audits
+- [ ] Monitor for suspicious activity
+
+## 📝 License
+
+MIT
+
+## 👥 Contributing
+
+This is a demonstration project. Feel free to fork and modify for your needs.
+
+## 🙋 Support
+
+For issues or questions:
+1. Check [NEW_ARCHITECTURE.md](NEW_ARCHITECTURE.md) for detailed information
+2. Review [AZURE_BACKEND_API_SETUP.md](AZURE_BACKEND_API_SETUP.md) for Azure configuration
+3. Check backend/frontend logs for error messages
 
 ---
 
-**Ready to use! 🚀 Just add your GitHub OAuth credentials and start!**
+**Built with ❤️ using Nuxt 3 and Spring Boot**
