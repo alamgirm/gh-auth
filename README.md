@@ -1,106 +1,48 @@
-# GitHub Device Flow OAuth Authentication
+# Multi-Auth Application
 
-A complete full-stack application demonstrating GitHub OAuth2 Device Flow authentication with **Nuxt 3** frontend and **Spring Boot** backend.
+A full-stack application demonstrating **dual authentication** with Azure Entra ID (primary) and GitHub (optional secondary) using Nuxt 3 and Spring Boot.
 
-## 🎯 Overview
+## 🎯 Architecture Overview
 
-This project implements the [GitHub OAuth Device Flow](https://docs.github.com/en/apps/oauth-apps/building-oauth-apps/authorizing-oauth-apps#device-flow), which is ideal for:
-- Desktop applications
-- CLI tools
-- Devices without browsers
-- Applications where client secrets cannot be safely stored
+- **Azure Entra ID**: Primary authentication (required)
+  - Token managed by MSAL in browser
+  - Sent with every backend request in Authorization header
+  - Backend validates JWT on each request (stateless)
 
-## 🏗️ Architecture
+- **GitHub**: Optional secondary authentication
+  - Only needed for GitHub-specific features
+  - Token stored securely on backend
+  - Linked to Azure user account
 
-```
-┌──────────────────┐
-│  Nuxt 3 Frontend │
-│  (Port 3000)     │
-└────────┬─────────┘
-         │
-         │ REST API
-         │
-┌────────▼───────────┐      ┌─────────────────┐
-│ Spring Boot Backend│─────→│  GitHub OAuth   │
-│  (Port 8080)       │←─────│  API            │
-└────────────────────┘      └─────────────────┘
-```
+## 🚀 Quick Start
 
-### Flow Diagram
+### Prerequisites
+- Node.js 18+
+- Java 17+
+- Azure Entra ID tenant and app registrations
+- GitHub OAuth App (optional, for GitHub features)
 
-```
-1. User clicks "Login"
-   │
-2. Frontend → Backend: POST /api/auth/device/code
-   │
-3. Backend → GitHub: Request device code
-   │
-4. GitHub → Backend: Returns device code + user code
-   │
-5. Backend → Frontend: Returns codes + verification URL
-   │
-6. Frontend displays user code and opens GitHub URL
-   │
-7. User enters code on GitHub and authorizes
-   │
-8. Frontend polls → Backend: GET /api/auth/device/poll
-   │
-9. Backend polls → GitHub: Check authorization status
-   │
-10. Once authorized, GitHub returns access token
-    │
-11. Backend fetches user info and returns to frontend
-    │
-12. Frontend stores token and displays user profile
-```
-
-## 🚀 Features
-
-- ✅ **Secure Authentication**: No client secret exposed on frontend
-- ✅ **Device Flow Implementation**: Full OAuth2 device flow support
-- ✅ **Stateless Backend**: No session storage required
-- ✅ **Modern UI**: Beautiful Tailwind CSS interface
-- ✅ **Real-time Polling**: Automatic authorization checking
-- ✅ **User Profile**: Display GitHub user information
-- ✅ **Token Persistence**: LocalStorage for token management
-- ✅ **Error Handling**: Comprehensive error states
-
-## 📋 Prerequisites
-
-- **Java 17+** (for backend)
-- **Node.js 18+** (for frontend)
-- **GitHub OAuth App** credentials
-
-## 🔑 Setup GitHub OAuth App
-
-1. Go to [GitHub Developer Settings](https://github.com/settings/developers)
-2. Click "New OAuth App"
-3. Fill in the details:
-   - **Application name**: Your app name
-   - **Homepage URL**: `http://localhost:3000`
-   - **Authorization callback URL**: Leave empty (not used in device flow)
-4. Click "Register application"
-5. Note your **Client ID**
-6. Generate a **Client Secret**
-
-## 🛠️ Installation & Setup
-
-### Backend Setup
+### 1. Backend Setup
 
 ```bash
 cd backend
 
-# Set environment variables
-export GITHUB_CLIENT_ID=your_client_id_here
-export GITHUB_CLIENT_SECRET=your_client_secret_here
+# Configure environment variables
+cp env.example .env
+# Edit .env with your values:
+# - BE_CLIENT_ID (Azure backend API client ID)
+# - BE_TENANT_ID (Azure tenant ID)
+# - GITHUB_CLIENT_ID (GitHub OAuth app ID)
+# - GITHUB_CLIENT_SECRET (GitHub OAuth secret)
 
-# Run the backend
-./gradlew bootRun
+# Run backend
+./run.sh
+# Or: ./gradlew bootRun
 ```
 
-The backend will start on `http://localhost:8080`
+Backend runs on: `http://localhost:8080`
 
-### Frontend Setup
+### 2. Frontend Setup
 
 ```bash
 cd frontend
@@ -108,191 +50,315 @@ cd frontend
 # Install dependencies
 npm install
 
-# Run the development server
+# Configure environment variables
+cp env.example .env
+# Edit .env with your values:
+# - NUXT_PUBLIC_AZURE_CLIENT_ID (Azure frontend SPA client ID)
+# - NUXT_PUBLIC_AZURE_AUTHORITY (Azure authority URL)
+# - NUXT_PUBLIC_AZURE_API_SCOPE (Backend API scope)
+
+# Run frontend
 npm run dev
 ```
 
-The frontend will start on `http://localhost:3000`
+Frontend runs on: `http://localhost:3000`
 
-## 🎮 Usage
+### 3. Open Browser
 
-1. **Start Both Servers**
-   - Backend on port 8080
-   - Frontend on port 3000
+```bash
+open http://localhost:3000
+```
 
-2. **Open Browser**
-   - Navigate to `http://localhost:3000`
+## 📚 Documentation
 
-3. **Login**
-   - Click "Login with GitHub"
-   - Copy the displayed device code
-   - Click "Open GitHub"
-   - Paste the code when prompted
-   - Authorize the application
+- **[NEW_ARCHITECTURE.md](NEW_ARCHITECTURE.md)** - Complete architecture guide, API documentation, and testing
+- **[AZURE_BACKEND_API_SETUP.md](AZURE_BACKEND_API_SETUP.md)** - Step-by-step Azure app registration setup
+- **[AZURE_SCOPE_CREATION_GUIDE.md](AZURE_SCOPE_CREATION_GUIDE.md)** - Visual guide for creating API scopes
 
-4. **Enjoy!**
-   - You'll be automatically logged in
-   - Your profile will be displayed
+## 🔑 Azure Configuration
+
+You need **TWO** Azure App Registrations:
+
+### Backend API App
+- Platform: Web API
+- Exposes API: `api://{backend-client-id}/access_as_user`
+- Used for: JWT token validation
+
+### Frontend SPA App
+- Platform: Single Page Application
+- Redirect URI: `http://localhost:3000`
+- API Permissions: Access to backend API
+- Used for: User authentication via MSAL
+
+See [AZURE_BACKEND_API_SETUP.md](AZURE_BACKEND_API_SETUP.md) for detailed setup.
+
+## 🔐 Security Features
+
+✅ **Azure Token**
+- Managed by MSAL in browser localStorage
+- Automatic token refresh
+- Validated on every backend request
+- Stateless authentication
+
+✅ **GitHub Token** (Optional)
+- Stored securely on backend database
+- Only accessible by owning Azure user
+- Linked with composite key: `azure:{azureId}:github`
+- Used for GitHub API calls on user's behalf
+
+✅ **No Session Storage**
+- Stateless backend (easy to scale)
+- Token-based validation
+- No session affinity needed
+
+## 🎨 User Experience
+
+### First Time User
+1. Click "Sign in with Microsoft"
+2. Redirected to Microsoft login
+3. Sign in with Azure credentials
+4. Redirected back to app
+5. Logged in with Azure
+6. (Optional) Click "Connect GitHub" for GitHub features
+
+### Returning User
+1. Visit app
+2. MSAL acquires token silently
+3. Instantly logged in (< 1 second)
+4. Both Azure and GitHub status shown
+
+## 🏗️ Tech Stack
+
+### Frontend
+- **Nuxt 3** - Vue 3 framework with SSR
+- **TypeScript** - Type-safe development
+- **Tailwind CSS** - Utility-first styling
+- **MSAL Browser** - Microsoft authentication library
+- **$fetch** - HTTP client for API calls
+
+### Backend
+- **Spring Boot 3.2** - Java web framework
+- **Spring WebFlux** - Reactive web support
+- **Spring Data JPA** - Database access
+- **H2 Database** - In-memory database (dev)
+- **Nimbus JOSE+JWT** - JWT validation
+- **Lombok** - Reduce boilerplate
 
 ## 📁 Project Structure
 
 ```
 gh-device-flow/
-├── backend/                    # Spring Boot Backend
-│   ├── src/
-│   │   └── main/
-│   │       ├── java/com/github/deviceflow/
-│   │       │   ├── controller/     # REST Controllers
-│   │       │   ├── service/        # Business Logic
-│   │       │   ├── model/          # Data Models
-│   │       │   └── config/         # Configuration
-│   │       └── resources/
-│   │           └── application.yml # Config file
-│   ├── build.gradle
-│   └── README.md
+├── backend/
+│   ├── src/main/java/com/github/deviceflow/
+│   │   ├── config/         # Configuration classes
+│   │   ├── controller/     # REST controllers
+│   │   ├── entity/         # JPA entities
+│   │   ├── model/          # Data models
+│   │   ├── repository/     # Data repositories
+│   │   └── service/        # Business logic
+│   ├── build.gradle        # Dependencies
+│   ├── env.example         # Backend env template
+│   └── run.sh             # Run script
 │
-├── frontend/                   # Nuxt 3 Frontend
-│   ├── pages/
-│   │   └── index.vue          # Main page
-│   ├── components/
-│   │   ├── LoginFlow.vue      # Login flow component
-│   │   └── UserProfile.vue    # User profile component
-│   ├── composables/
-│   │   └── useAuth.ts         # Auth composable
-│   ├── nuxt.config.ts
-│   ├── package.json
-│   └── README.md
+├── frontend/
+│   ├── components/         # Vue components
+│   │   ├── GitHubConnection.vue
+│   │   ├── LoginFlow.vue
+│   │   └── UserProfile.vue
+│   ├── composables/        # Composables
+│   │   ├── useAzureAuth.ts
+│   │   └── useMultiAuth.ts
+│   ├── pages/             # Page components
+│   │   ├── auth/callback.vue
+│   │   └── index.vue
+│   ├── app.vue            # Root component
+│   ├── nuxt.config.ts     # Nuxt configuration
+│   └── env.example        # Frontend env template
 │
-└── README.md                   # This file
+└── Documentation/
+    ├── README.md (this file)
+    ├── NEW_ARCHITECTURE.md
+    ├── AZURE_BACKEND_API_SETUP.md
+    └── AZURE_SCOPE_CREATION_GUIDE.md
 ```
-
-## 🔌 API Endpoints
-
-### Backend REST API
-
-| Method | Endpoint | Description |
-|--------|----------|-------------|
-| POST | `/api/auth/device/code` | Initiate device flow |
-| GET | `/api/auth/device/poll?device_code=xxx` | Poll for authorization |
-| GET | `/api/auth/verify` | Verify access token |
-| GET | `/api/auth/health` | Health check |
-
-## 🔐 Security Features
-
-1. **No Client Secret on Frontend**: The client secret is only stored on the backend
-2. **CORS Protection**: Backend validates allowed origins
-3. **Token Validation**: Backend verifies tokens with GitHub
-4. **No Session Storage**: Stateless backend design
-5. **LocalStorage Only**: Frontend stores tokens client-side
 
 ## 🧪 Testing
 
-### Test Backend
-
+### Test Azure Authentication
 ```bash
-cd backend
-./gradlew test
+1. Open http://localhost:3000
+2. Click "Sign in with Microsoft"
+3. Sign in with Azure credentials
+4. Should see Azure user profile
+5. Status: "Primary Authentication: ✓ Authenticated"
 ```
 
-### Test Frontend
-
+### Test GitHub Connection
 ```bash
-cd frontend
-npm run test
+1. While authenticated with Azure
+2. Click "Connect GitHub"
+3. Authorize in popup
+4. Popup closes automatically
+5. Status: "GitHub Integration: ✓ Connected"
+6. See GitHub username and avatar
 ```
 
-### Manual Testing
-
+### Test Disconnect
 ```bash
-# Test backend health
-curl http://localhost:8080/api/auth/health
-
-# Test device code initiation
-curl -X POST http://localhost:8080/api/auth/device/code
+1. Click "Disconnect GitHub"
+2. Confirm
+3. Status changes to "Not Connected"
+4. GitHub data removed from database
 ```
 
-## 📝 Configuration
-
-### Backend Configuration
-
-Edit `backend/src/main/resources/application.yml`:
-
-```yaml
-github:
-  oauth:
-    client-id: ${GITHUB_CLIENT_ID}
-    client-secret: ${GITHUB_CLIENT_SECRET}
-
-cors:
-  allowed-origins: http://localhost:3000
-```
-
-### Frontend Configuration
-
-Edit `frontend/nuxt.config.ts`:
-
-```typescript
-runtimeConfig: {
-  public: {
-    apiBaseUrl: 'http://localhost:8080'
-  }
-}
-```
-
-## 🚢 Production Deployment
-
-### Backend
-
+### Test Logout
 ```bash
-cd backend
-./gradlew build
-java -jar build/libs/github-device-flow-backend-1.0.0.jar
-```
-
-### Frontend
-
-```bash
-cd frontend
-npm run build
-npm run preview
+1. Click "Sign Out"
+2. Azure logout (MSAL clears tokens)
+3. Redirected to login page
+4. Both Azure and GitHub cleared
 ```
 
 ## 🐛 Troubleshooting
 
-### Backend not starting
-- Check Java version: `java -version` (should be 17+)
-- Verify environment variables are set
-- Check port 8080 is not in use
+### Backend Issues
 
-### Frontend not connecting
-- Verify backend is running on port 8080
-- Check CORS settings in backend
-- Clear browser cache and localStorage
+**"GitHub client ID is empty"**
+```bash
+# Make sure you source .env before running
+cd backend
+source .env
+./gradlew bootRun
 
-### Authorization failing
-- Verify GitHub OAuth app credentials
-- Check GitHub app is not suspended
-- Ensure device flow is enabled (it is by default)
+# Or use the run script
+./run.sh
+```
 
-## 📚 Resources
+**"Transaction required" errors**
+```bash
+# Fixed: @Transactional annotations added
+# Restart backend if you see this
+```
 
-- [GitHub OAuth Device Flow Docs](https://docs.github.com/en/apps/oauth-apps/building-oauth-apps/authorizing-oauth-apps#device-flow)
-- [Nuxt 3 Documentation](https://nuxt.com/)
-- [Spring Boot Documentation](https://spring.io/projects/spring-boot)
+### Frontend Issues
 
-## 📄 License
+**"MSAL not initialized"**
+```bash
+# Check environment variables
+cat frontend/.env
 
-MIT License - feel free to use this project for learning and development!
+# Should have:
+# NUXT_PUBLIC_AZURE_CLIENT_ID=...
+# NUXT_PUBLIC_AZURE_AUTHORITY=...
+# NUXT_PUBLIC_AZURE_API_SCOPE=...
+```
 
-## 🤝 Contributing
+**"401 Unauthorized" on backend calls**
+```bash
+# Check backend .env has correct values:
+# BE_CLIENT_ID should match backend app registration
+# BE_TENANT_ID should match your Azure tenant
 
-Contributions are welcome! Please feel free to submit a Pull Request.
+# Check frontend API scope matches backend:
+# NUXT_PUBLIC_AZURE_API_SCOPE=api://{BE_CLIENT_ID}/access_as_user
+```
 
-## 👤 Author
+## 📊 API Endpoints
 
-Built as a demonstration of GitHub OAuth Device Flow implementation.
+### Azure User (Require Azure Token in Authorization Header)
+
+| Method | Endpoint | Description |
+|--------|----------|-------------|
+| GET | `/api/auth/user` | Get current Azure user |
+| GET | `/api/auth/status` | Get both auth statuses |
+
+### GitHub Linking (Require Azure Token)
+
+| Method | Endpoint | Description |
+|--------|----------|-------------|
+| GET | `/api/auth/github/authorize-url` | Get GitHub OAuth URL |
+| POST | `/api/auth/github/link` | Link GitHub account |
+| POST | `/api/auth/github/unlink` | Unlink GitHub account |
+
+## 🎯 Use Cases
+
+### Enterprise User (Azure Only)
+```
+User: employee@company.com
+Authentication: Azure Entra ID
+GitHub: Not connected
+Result: Full app access
+```
+
+### Developer (Azure + GitHub)
+```
+User: dev@company.com
+Authentication: Azure Entra ID
+GitHub: Connected
+Result: Full app access + GitHub features
+```
+
+## 🔄 Token Flow
+
+```
+Frontend Request:
+GET /api/auth/status
+Authorization: Bearer eyJ0eXAiOiJKV1QiLCJhb... (Azure JWT)
+
+Backend:
+1. Extract token from Authorization header
+2. Validate JWT signature using Azure JWKS
+3. Verify issuer and audience
+4. Extract user info from claims
+5. Return user data
+
+If GitHub connected:
+6. Look up GitHub token in DB: azure:{azureId}:github
+7. Make GitHub API call with stored token
+8. Return combined data
+```
+
+## 🚀 Production Considerations
+
+### Backend
+- [ ] Switch from H2 to PostgreSQL/MySQL
+- [ ] Enable HTTPS
+- [ ] Configure CORS for production domain
+- [ ] Add rate limiting
+- [ ] Enable logging to file/service
+- [ ] Add health check endpoints
+- [ ] Consider token refresh strategy for GitHub
+
+### Frontend
+- [ ] Update redirect URIs in Azure app registration
+- [ ] Update CORS settings in backend
+- [ ] Enable production build optimizations
+- [ ] Add error tracking (e.g., Sentry)
+- [ ] Add analytics
+- [ ] Consider CDN for static assets
+
+### Security
+- [ ] Review MSAL cache options (localStorage vs memory)
+- [ ] Implement token refresh for GitHub
+- [ ] Add request signing/encryption if needed
+- [ ] Regular security audits
+- [ ] Monitor for suspicious activity
+
+## 📝 License
+
+MIT
+
+## 👥 Contributing
+
+This is a demonstration project. Feel free to fork and modify for your needs.
+
+## 🙋 Support
+
+For issues or questions:
+1. Check [NEW_ARCHITECTURE.md](NEW_ARCHITECTURE.md) for detailed information
+2. Review [AZURE_BACKEND_API_SETUP.md](AZURE_BACKEND_API_SETUP.md) for Azure configuration
+3. Check backend/frontend logs for error messages
 
 ---
 
-**Happy Coding! 🎉**
-
+**Built with ❤️ using Nuxt 3 and Spring Boot**

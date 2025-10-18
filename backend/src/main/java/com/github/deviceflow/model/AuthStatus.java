@@ -9,14 +9,14 @@ import lombok.NoArgsConstructor;
 @Builder
 @NoArgsConstructor
 @AllArgsConstructor
-public class PollStatusResponse {
+public class AuthStatus {
     
-    private String status; // "pending", "authorized", "expired", "error"
+    private boolean azureAuthenticated;
+    private boolean githubConnected;
     
-    private String accessToken;
+    private GitHubUser azureUser;
+    private GitHubUser githubUser;
     
     private String message;
-    
-    private GitHubUser user;
 }
 
