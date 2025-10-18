@@ -1,8 +1,10 @@
 package com.github.deviceflow.controller;
 
+import com.github.deviceflow.model.AuthStatus;
 import com.github.deviceflow.model.GitHubUser;
+import com.github.deviceflow.service.AzureTokenValidationService;
 import com.github.deviceflow.service.GitHubAuthService;
-import jakarta.servlet.http.HttpSession;
+import com.github.deviceflow.service.UserLinkingService;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.http.ResponseEntity;
@@ -16,21 +18,121 @@ import java.util.UUID;
 @RestController
 @RequestMapping("/api/auth")
 @RequiredArgsConstructor
+@CrossOrigin(origins = "http://localhost:3000", allowCredentials = "true")
 public class AuthController {
     
-    private final GitHubAuthService authService;
+    private final GitHubAuthService githubAuthService;
+    private final AzureTokenValidationService azureTokenValidationService;
+    private final UserLinkingService userLinkingService;
+    
+    // ========== Azure Primary Authentication ==========
     
     /**
-     * Get the GitHub authorization URL for popup-based login
-     * Frontend opens this URL in a popup window
+     * Validate Azure token and get user info
+     * Azure token is sent in Authorization header on every request
      */
-    @GetMapping("/authorize-url")
-    public ResponseEntity<Map<String, String>> getAuthorizeUrl() {
-        log.info("Received request for authorization URL");
+    @GetMapping("/user")
+    public ResponseEntity<GitHubUser> getCurrentUser(
+            @RequestHeader(value = "Authorization", required = false) String authHeader) {
+        
+        if (authHeader == null || !authHeader.startsWith("Bearer ")) {
+            return ResponseEntity.status(401).build();
+        }
+        
+        String azureToken = authHeader.substring(7);
+        
         try {
-            // Generate a random state for CSRF protection
+            GitHubUser user = azureTokenValidationService.validateTokenAndGetUser(azureToken);
+            if (user != null) {
+                return ResponseEntity.ok(user);
+            } else {
+                return ResponseEntity.status(401).build();
+            }
+        } catch (Exception e) {
+            log.error("Error validating Azure token", e);
+            return ResponseEntity.status(401).build();
+        }
+    }
+    
+    /**
+     * Get authentication status for both Azure and GitHub
+     */
+    @GetMapping("/status")
+    public ResponseEntity<AuthStatus> getAuthStatus(
+            @RequestHeader(value = "Authorization", required = false) String authHeader) {
+        
+        if (authHeader == null || !authHeader.startsWith("Bearer ")) {
+            return ResponseEntity.ok(AuthStatus.builder()
+                    .azureAuthenticated(false)
+                    .githubConnected(false)
+                    .message("Not authenticated")
+                    .build());
+        }
+        
+        String azureToken = authHeader.substring(7);
+        
+        try {
+            // Validate Azure token
+            GitHubUser azureUser = azureTokenValidationService.validateTokenAndGetUser(azureToken);
+            
+            if (azureUser == null) {
+                return ResponseEntity.ok(AuthStatus.builder()
+                        .azureAuthenticated(false)
+                        .githubConnected(false)
+                        .message("Invalid Azure token")
+                        .build());
+            }
+            
+            // Check if GitHub is linked
+            String azureUserId = String.valueOf(azureUser.getId());
+            boolean githubLinked = userLinkingService.hasGitHubLinked(azureUserId);
+            
+            GitHubUser githubUser = null;
+            if (githubLinked) {
+                // Get GitHub user info using stored token
+                String githubToken = userLinkingService.getGitHubToken(azureUserId);
+                if (githubToken != null) {
+                    try {
+                        githubUser = githubAuthService.fetchUserInfoWithStoredToken(githubToken);
+                    } catch (Exception e) {
+                        log.warn("GitHub token invalid, unlinking", e);
+                        userLinkingService.unlinkGitHubAccount(azureUserId);
+                        githubLinked = false;
+                    }
+                }
+            }
+            
+            return ResponseEntity.ok(AuthStatus.builder()
+                    .azureAuthenticated(true)
+                    .githubConnected(githubLinked)
+                    .azureUser(azureUser)
+                    .githubUser(githubUser)
+                    .message("Authenticated")
+                    .build());
+            
+        } catch (Exception e) {
+            log.error("Error getting auth status", e);
+            return ResponseEntity.status(500).build();
+        }
+    }
+    
+    // ========== GitHub Account Linking ==========
+    
+    /**
+     * Get GitHub authorization URL for linking account
+     */
+    @GetMapping("/github/authorize-url")
+    public ResponseEntity<Map<String, String>> getGitHubAuthorizeUrl(
+            @RequestHeader(value = "Authorization", required = false) String authHeader) {
+        
+        // Verify user is authenticated with Azure first
+        if (authHeader == null || !authHeader.startsWith("Bearer ")) {
+            return ResponseEntity.status(401).body(Map.of("error", "Azure authentication required"));
+        }
+        
+        try {
             String state = UUID.randomUUID().toString();
-            String authUrl = authService.getAuthorizationUrl(state);
+            String authUrl = githubAuthService.getAuthorizationUrl(state);
             
             Map<String, String> response = new HashMap<>();
             response.put("url", authUrl);
@@ -38,144 +140,94 @@ public class AuthController {
             
             return ResponseEntity.ok(response);
         } catch (Exception e) {
-            log.error("Error generating authorization URL", e);
+            log.error("Error generating GitHub authorization URL", e);
             return ResponseEntity.internalServerError().build();
         }
     }
     
     /**
-     * Exchange authorization code for access token
-     * Backend stores token in database and creates session
-     * Frontend receives only the userId (session identifier)
+     * Link GitHub account to Azure user
      */
-    @PostMapping("/exchange-code")
-    public ResponseEntity<Map<String, Object>> exchangeCode(
-            @RequestBody Map<String, String> request,
-            HttpSession session) {
-        String code = request.get("code");
-        String state = request.get("state");
+    @PostMapping("/github/link")
+    public ResponseEntity<Map<String, Object>> linkGitHubAccount(
+            @RequestHeader(value = "Authorization", required = false) String authHeader,
+            @RequestBody Map<String, String> request) {
         
-        log.info("Received code exchange request");
+        // Verify Azure authentication
+        if (authHeader == null || !authHeader.startsWith("Bearer ")) {
+            return ResponseEntity.status(401).body(Map.of("error", "Azure authentication required"));
+        }
+        
+        String azureToken = authHeader.substring(7);
+        String code = request.get("code");
         
         if (code == null || code.isEmpty()) {
             return ResponseEntity.badRequest().build();
         }
         
         try {
-            // Exchange code for access token and store in database
-            String userId = authService.exchangeCodeForToken(code);
+            // Validate Azure token to get user ID
+            GitHubUser azureUser = azureTokenValidationService.validateTokenAndGetUser(azureToken);
+            if (azureUser == null) {
+                return ResponseEntity.status(401).body(Map.of("error", "Invalid Azure token"));
+            }
             
-            // Store userId in session
-            session.setAttribute("userId", userId);
-            log.info("Session created for userId: {}", userId);
+            String azureUserId = String.valueOf(azureUser.getId());
             
-            // Get cached user profile
-            GitHubUser user = authService.getCachedUserProfile(userId);
+            // Exchange GitHub code for token WITHOUT storing
+            Map<String, Object> githubData = githubAuthService.exchangeCodeWithoutStoring(code);
             
-            Map<String, Object> response = new HashMap<>();
-            response.put("userId", userId);
-            response.put("user", user);
-            response.put("message", "Authentication successful");
+            String githubToken = (String) githubData.get("token");
+            GitHubUser githubUser = (GitHubUser) githubData.get("user");
+            String githubUserId = (String) githubData.get("userId");
             
-            return ResponseEntity.ok(response);
+            log.info("GitHub user from exchange: {} ({})", githubUser.getLogin(), githubUserId);
+            log.info("Linking to Azure user: {}", azureUserId);
+            
+            // Link GitHub to Azure user (stores in DB as "azure:{azureId}:github")
+            userLinkingService.linkGitHubAccount(azureUserId, githubUserId, githubToken, githubUser.getLogin());
+            
+            log.info("GitHub account linked successfully");
+            
+            return ResponseEntity.ok(Map.of(
+                    "message", "GitHub account linked successfully",
+                    "githubUser", githubUser
+            ));
             
         } catch (Exception e) {
-            log.error("Error exchanging code for token", e);
-            return ResponseEntity.status(401).body(Map.of(
-                    "error", "Authentication failed",
-                    "message", e.getMessage()
-            ));
+            log.error("Error linking GitHub account", e);
+            return ResponseEntity.status(500).body(Map.of("error", e.getMessage()));
         }
     }
     
     /**
-     * Get current user info
-     * Uses userId from session to fetch data from GitHub
+     * Unlink GitHub account from Azure user
      */
-    @GetMapping("/user")
-    public ResponseEntity<GitHubUser> getCurrentUser(HttpSession session) {
-        String userId = (String) session.getAttribute("userId");
+    @PostMapping("/github/unlink")
+    public ResponseEntity<Map<String, String>> unlinkGitHubAccount(
+            @RequestHeader(value = "Authorization", required = false) String authHeader) {
         
-        if (userId == null) {
-            log.warn("No userId in session");
-            return ResponseEntity.status(401).build();
+        if (authHeader == null || !authHeader.startsWith("Bearer ")) {
+            return ResponseEntity.status(401).body(Map.of("error", "Azure authentication required"));
         }
         
-        log.info("Getting user info for session userId: {}", userId);
+        String azureToken = authHeader.substring(7);
         
         try {
-            GitHubUser user = authService.getUserInfo(userId);
-            if (user != null) {
-                return ResponseEntity.ok(user);
-            } else {
-                return ResponseEntity.status(401).build();
+            GitHubUser azureUser = azureTokenValidationService.validateTokenAndGetUser(azureToken);
+            if (azureUser == null) {
+                return ResponseEntity.status(401).body(Map.of("error", "Invalid Azure token"));
             }
+            
+            String azureUserId = String.valueOf(azureUser.getId());
+            userLinkingService.unlinkGitHubAccount(azureUserId);
+            
+            return ResponseEntity.ok(Map.of("message", "GitHub account unlinked successfully"));
+            
         } catch (Exception e) {
-            log.error("Error getting user info", e);
-            // Token might be invalid - clear session
-            session.invalidate();
-            return ResponseEntity.status(401).build();
+            log.error("Error unlinking GitHub account", e);
+            return ResponseEntity.status(500).body(Map.of("error", e.getMessage()));
         }
-    }
-    
-    /**
-     * Get cached user profile (doesn't call GitHub API)
-     */
-    @GetMapping("/user/cached")
-    public ResponseEntity<GitHubUser> getCachedUser(HttpSession session) {
-        String userId = (String) session.getAttribute("userId");
-        
-        if (userId == null) {
-            log.warn("No userId in session");
-            return ResponseEntity.status(401).build();
-        }
-        
-        log.info("Getting cached user info for userId: {}", userId);
-        
-        GitHubUser user = authService.getCachedUserProfile(userId);
-        if (user != null) {
-            return ResponseEntity.ok(user);
-        } else {
-            session.invalidate();
-            return ResponseEntity.status(401).build();
-        }
-    }
-    
-    /**
-     * Check if user is authenticated
-     */
-    @GetMapping("/check")
-    public ResponseEntity<Map<String, Object>> checkAuth(HttpSession session) {
-        String userId = (String) session.getAttribute("userId");
-        
-        Map<String, Object> response = new HashMap<>();
-        
-        if (userId != null && authService.hasValidToken(userId)) {
-            GitHubUser user = authService.getCachedUserProfile(userId);
-            response.put("authenticated", true);
-            response.put("userId", userId);
-            response.put("user", user);
-            return ResponseEntity.ok(response);
-        } else {
-            response.put("authenticated", false);
-            return ResponseEntity.ok(response);
-        }
-    }
-    
-    /**
-     * Logout - delete token from database and invalidate session
-     */
-    @PostMapping("/logout")
-    public ResponseEntity<Map<String, String>> logout(HttpSession session) {
-        String userId = (String) session.getAttribute("userId");
-        
-        if (userId != null) {
-            log.info("Logging out userId: {}", userId);
-            authService.deleteUserToken(userId);
-            session.invalidate();
-        }
-        
-        return ResponseEntity.ok(Map.of("message", "Logged out successfully"));
     }
     
     /**

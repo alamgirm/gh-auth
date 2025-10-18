@@ -18,7 +18,10 @@ import org.springframework.web.reactive.function.client.WebClientResponseExcepti
 
 import java.net.URLEncoder;
 import java.nio.charset.StandardCharsets;
+import java.util.HashMap;
+import java.util.Map;
 import java.util.Optional;
+import java.util.UUID;
 
 @Slf4j
 @Service
@@ -246,5 +249,102 @@ public class GitHubAuthService {
      */
     public boolean hasValidToken(String userId) {
         return userTokenRepository.findByUserId(userId).isPresent();
+    }
+    
+    /**
+     * Get stored GitHub token for a user
+     */
+    public String getStoredToken(String userId) {
+        return userTokenRepository.findByUserId(userId)
+                .map(UserToken::getAccessToken)
+                .orElse(null);
+    }
+    
+    /**
+     * Fetch user info using a provided token
+     */
+    public GitHubUser fetchUserInfoWithStoredToken(String token) {
+        log.debug("Fetching GitHub user info with provided token");
+        
+        WebClient webClient = webClientBuilder.build();
+        
+        try {
+            GitHubUser user = webClient.get()
+                    .uri(config.getUserApiUrl())
+                    .header(HttpHeaders.AUTHORIZATION, "Bearer " + token)
+                    .header(HttpHeaders.ACCEPT, MediaType.APPLICATION_JSON_VALUE)
+                    .retrieve()
+                    .bodyToMono(GitHubUser.class)
+                    .block();
+            
+            log.info("Successfully fetched GitHub user: {}", user != null ? user.getLogin() : "unknown");
+            return user;
+            
+        } catch (Exception e) {
+            log.error("Error fetching GitHub user info", e);
+            throw new RuntimeException("Failed to fetch GitHub user info: " + e.getMessage());
+        }
+    }
+    
+    /**
+     * Exchange code for token WITHOUT storing (for account linking)
+     * Returns both token and user info
+     */
+    public Map<String, Object> exchangeCodeWithoutStoring(String code) {
+        log.info("Exchanging GitHub code for token (no storage)");
+        
+        WebClient webClient = webClientBuilder.build();
+        
+        MultiValueMap<String, String> formData = new LinkedMultiValueMap<>();
+        formData.add("client_id", config.getClientId());
+        formData.add("client_secret", config.getClientSecret());
+        formData.add("code", code);
+        formData.add("redirect_uri", config.getRedirectUri());
+        
+        try {
+            AccessTokenResponse response = webClient.post()
+                    .uri(config.getTokenUrl())
+                    .header(HttpHeaders.ACCEPT, MediaType.APPLICATION_JSON_VALUE)
+                    .contentType(MediaType.APPLICATION_FORM_URLENCODED)
+                    .body(BodyInserters.fromFormData(formData))
+                    .retrieve()
+                    .bodyToMono(AccessTokenResponse.class)
+                    .block();
+            
+            if (response != null && response.getAccessToken() != null) {
+                log.info("Successfully exchanged code for token");
+                
+                // Fetch user info
+                GitHubUser user = fetchUserInfoWithToken(response.getAccessToken());
+                
+                if (user == null) {
+                    throw new RuntimeException("Failed to fetch user info");
+                }
+                
+                log.info("GitHub user: {} ({})", user.getLogin(), user.getId());
+                
+                // Return both without storing
+                Map<String, Object> result = new HashMap<>();
+                result.put("token", response.getAccessToken());
+                result.put("user", user);
+                result.put("userId", String.valueOf(user.getId()));
+                
+                return result;
+                
+            } else if (response != null && response.getError() != null) {
+                log.error("Error from GitHub: {} - {}", response.getError(), response.getErrorDescription());
+                throw new RuntimeException("GitHub OAuth error: " + response.getError());
+            }
+            
+        } catch (WebClientResponseException e) {
+            log.error("Error exchanging code for token: {} - {}", 
+                    e.getStatusCode(), e.getResponseBodyAsString());
+            throw new RuntimeException("Failed to exchange code for token: " + e.getMessage());
+        } catch (Exception e) {
+            log.error("Unexpected error during token exchange", e);
+            throw new RuntimeException("Failed to exchange code for token: " + e.getMessage());
+        }
+        
+        throw new RuntimeException("Failed to exchange code for token");
     }
 }

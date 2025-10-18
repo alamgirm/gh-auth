@@ -33,6 +33,10 @@ dependencies {
     // WebClient for HTTP requests
     implementation 'org.springframework.boot:spring-boot-starter-webflux'
     
+    // Azure AD / Entra authentication
+    implementation 'com.microsoft.azure:msal4j:1.14.3'
+    implementation 'com.nimbusds:nimbus-jose-jwt:9.37.3'
+    
     // Lombok
     compileOnly 'org.projectlombok:lombok'
     annotationProcessor 'org.projectlombok:lombok'

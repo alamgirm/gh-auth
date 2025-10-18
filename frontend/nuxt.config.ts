@@ -8,6 +8,9 @@ export default defineNuxtConfig({
   runtimeConfig: {
     public: {
       apiBaseUrl: process.env.NUXT_PUBLIC_API_BASE_URL || 'http://localhost:8080',
+      azureClientId: process.env.NUXT_PUBLIC_AZURE_CLIENT_ID || '',
+      azureAuthority: process.env.NUXT_PUBLIC_AZURE_AUTHORITY || 'https://login.microsoftonline.com/common',
+      azureApiScope: process.env.NUXT_PUBLIC_AZURE_API_SCOPE || 'User.Read', // Backend API scope
     }
   },
   

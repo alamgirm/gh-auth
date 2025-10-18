@@ -26,7 +26,7 @@ public class UserToken {
     @Column(nullable = false)
     private String username; // GitHub username
     
-    @Column(nullable = false, length = 1000)
+    @Column(nullable = false, length = 5000)
     private String accessToken;
     
     @Column(length = 500)

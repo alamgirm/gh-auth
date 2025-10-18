@@ -5,11 +5,28 @@
 </template>
 
 <script setup lang="ts">
-const { loadAuthState } = useAuth()
+const { checkAuthStatus, handleAzureRedirect } = useMultiAuth()
 
-// Load auth state on mount
-onMounted(() => {
-  loadAuthState()
+// Handle Azure redirect and load auth state on mount
+onMounted(async () => {
+  try {
+    // Always check for Azure redirect on mount
+    // MSAL will handle it if there's a redirect response
+    const azureResult = await handleAzureRedirect()
+    
+    if (azureResult) {
+      console.log('Azure redirect handled successfully, user logged in')
+      // Clean URL to remove query parameters
+      window.history.replaceState({}, document.title, window.location.pathname)
+    } else {
+      // No redirect, check if user has existing Azure session
+      await checkAuthStatus()
+    }
+  } catch (error) {
+    console.error('Error handling Azure redirect:', error)
+    // Still try to load auth state even if redirect handling fails
+    await checkAuthStatus()
+  }
 })
 </script>
 

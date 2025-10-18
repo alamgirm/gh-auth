@@ -40,7 +40,7 @@ export const useAuth = () => {
   // Get authorization URL from backend
   const getAuthorizationUrl = async () => {
     try {
-      const response: any = await $fetch(`${apiBaseUrl}/api/auth/authorize-url`, {
+      const response: any = await $fetch(`${apiBaseUrl}/api/auth/github/authorize-url`, {
         method: 'GET',
         credentials: 'include', // Important: include cookies for session
       })
@@ -55,7 +55,7 @@ export const useAuth = () => {
   // Backend stores the token and returns userId
   const exchangeCodeForUserId = async (code: string, state: string) => {
     try {
-      const response: any = await $fetch(`${apiBaseUrl}/api/auth/exchange-code`, {
+      const response: any = await $fetch(`${apiBaseUrl}/api/auth/github/exchange-code`, {
         method: 'POST',
         credentials: 'include', // Important: include cookies for session
         body: {

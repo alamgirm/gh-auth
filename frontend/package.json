@@ -13,7 +13,8 @@
   "dependencies": {
     "nuxt": "^3.13.0",
     "vue": "^3.4.0",
-    "vue-router": "^4.4.0"
+    "vue-router": "^4.4.0",
+    "@azure/msal-browser": "^3.7.0"
   },
   "devDependencies": {
     "@nuxtjs/tailwindcss": "^6.12.0",
